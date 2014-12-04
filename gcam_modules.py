@@ -81,7 +81,7 @@ class GcamModuleBase(object):
 
     def run(self):
         ## TODO: have this run in a separate thread 
-        self.runmod(params)
+        self.runmod()
         self.complete = 1
 
     def fetch(self):
@@ -90,8 +90,9 @@ class GcamModuleBase(object):
         ## waits if necessary and returns the results.
         if complete==0:
             ## once asynchronous components are implemented, we will
-            ## wait() here, and this will no longer be an error.
-            raise RuntimeError("Fetching data from a component that has not yet run.") 
+            ## wait() here.  For now, we just run the module in the
+            ## current thread.
+            self.run()
         
         return self.results
 
@@ -126,6 +127,9 @@ class GlobalParamsModule(GcamModuleBase):
     def __init__(self, cap_tbl):
         super(GlobalParamsModule, self).__init__(self, cap_tbl)
         self.results = self.params # this is a reference copy, so any entries in params will also appear in results
+        cap_tbl["general"] = self
+        self.complete = 1       # nothing to do, so we're always complete
+        
     def runmod(self):
         pass                    # nothing to do because all we want to return is a copy of the params array
 
@@ -201,6 +205,8 @@ class GcamModule(GcamModuleBase):
 
         ## now we're ready to actually do the run.  We don't check the return code; we let the run() method do that.
         os.chdir(self.workdir)
+        print "Running:  %s -C%s -L%s" % (exe, cfg, logcfg)
+        
         return subprocess.call([exe, '-C'+cfg, '-L'+logcfg])
 
 ## class for the hydrology code
@@ -235,6 +241,8 @@ class HydroModule(GcamModuleBase):
         prefile  = 'inputs/climatefut/data_' + gcm + '_' + scenario + '_pre.csv'
         tempfile = 'inputs/climatefut/data_' + gcm + '_' + scenario + '_tmp.csv'
         dtrfile  = 'inputs/climatefut/data_' + gcm + '_' + scenario + '_dtr.csv'
+
+        print "input files:\n\t%s\n\t%s\n\t%s" % (prefile, tempfile, dtrfile)
     
         msgpfx = "HydroModule:  "
         if not os.path.exists(prefile):
@@ -275,6 +283,7 @@ class HydroModule(GcamModuleBase):
         ##       suitable batch language.  Notably, if it encounters an error
         ##       it will stop at a command prompt instead of exiting with an
         ##       error code.  Yuck.
+        print 'Running the matlab hydrology code'
         with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r', "run_future_hydro('" + gcm+ "','" + "a1');exit"]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)

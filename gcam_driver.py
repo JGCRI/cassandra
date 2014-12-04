@@ -30,16 +30,17 @@ def gcam_parse(cfgfile_name):
                 section = sectnmatch.group(1)
                 print "parser starting section:  %s" % section
                 
-                if not section.lower()=="general":
+                if not section.lower()=="global":
                     ## Section header starts a new module
                     ## create the new module:  the section name is the module class
+                    ## TODO: is the input from the config file trusted enough to do it this way?
                     modcreate = "%s(capability_table)" % section
                     module = eval(modcreate)
                 else:
                     ## This is kind of a wart because I want to call
-                    ## the section "general", but I don't want to have
-                    ## a module called "general".
-                    module = GeneralParamsModule(capability_table)
+                    ## the section "global", but I don't want to have
+                    ## a module called "global".
+                    module = GlobalParamsModule(capability_table)
                     
                 module_list.append(module) 
                 continue        # nothing further to do for a section header line
@@ -72,3 +73,18 @@ def gcam_parse(cfgfile_name):
 ## end of gcam_parse
 
 
+if __name__ == "__main__":
+    from sys import argv
+
+    (modlist, cap_table) = gcam_parse(argv[1])
+
+    ## We will look up "global" in the cap_table and process any
+    ## global parameters here, but in the current version we don't
+    ## have any global parameters to process, so skip it.
+
+    for module in modlist:
+        print "running %s" % module.__class__
+        module.run()
+
+    print "FIN."
+    
