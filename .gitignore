@@ -1,0 +1,46 @@
+# Compiled Object files
+*.o
+
+# python compiled files
+*.pyc
+
+# make dependency files
+*.d
+
+# Compiled Dynamic libraries
+*.so
+
+# Compiled Static libraries
+*.a
+
+# Executables
+*.exe
+*.out
+*.app
+mat2nc
+
+# OS-specific files
+.DS_Store
+# History files
+.Rhistory
+
+# R data files from past sessions
+.Rdata
+
+# Emacs backup files
+*~
+
+# Emacs autosave files
+.[#]*
+[#]*[#]
+
+# LibreOffice lock files
+.~lock*
+
+# Output netcdf files
+*.nc
+
+# Directory for misc stuff that we are not tracking
+extra-data
+
+
