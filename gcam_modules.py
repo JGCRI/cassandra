@@ -125,7 +125,7 @@ class GcamModuleBase(object):
 ## up.
 class GlobalParamsModule(GcamModuleBase):
     def __init__(self, cap_tbl):
-        super(GlobalParamsModule, self).__init__(self, cap_tbl)
+        super(GlobalParamsModule, self).__init__(cap_tbl)
         self.results = self.params # this is a reference copy, so any entries in params will also appear in results
         cap_tbl["general"] = self
         self.complete = 1       # nothing to do, so we're always complete
@@ -135,22 +135,22 @@ class GlobalParamsModule(GcamModuleBase):
 
 ## class for the module that actually runs gcam
 ## params: 
-##   exe     = full path to gcam.exe
-##   cfg     = full path to gcam configuration file
-##   logcfg  = full path to gcam log configuration file
-##   clobber = flag: True = clobber old outputs, False = preserve old outputs
+##   exe        = full path to gcam.exe
+##   config     = full path to gcam configuration file
+##   logconfig  = full path to gcam log configuration file
+##   clobber    = flag: True = clobber old outputs, False = preserve old outputs
 ## results:
 ##   dbxml   - gcam dbxml output file.  We get this from the gcam config file.    
 class GcamModule(GcamModuleBase):
     def __init__(self, cap_tbl):
-        super(GcamModule,self).__init__(self, cap_tbl)
+        super(GcamModule,self).__init__(cap_tbl)
         cap_tbl["gcam-core"] = self
 
     def runmod(self):
         ### Process the parameters
-        exe    = self.params["gcam.exe"]
-        cfg    = self.params["gcam.config"]
-        logcfg = self.params["gcam.logconfig"]
+        exe    = self.params["exe"]
+        cfg    = self.params["config"]
+        logcfg = self.params["logconfig"]
 
         ## usually the exe, cfg, and logcfg files will be in the same
         ## directory, but in case of difference, take the location of
@@ -159,43 +159,49 @@ class GcamModule(GcamModuleBase):
 
         msgpfx = "GcamModule: "    # prefix for messages coming out of this module
         ## Do some basic checks:  do these files exist, etc.
-        if !os.path.exists(exe):
+        if not os.path.exists(exe):
             raise RuntimeError(msgpfx + "File " + exe + " does not exist!")
-        if !os.path.exists(cfg):
+        if not os.path.exists(cfg):
             raise RuntimeError(msgpfx + "File " + cfg + " does not exist!")
-        if !os.path.exists(logcfg):
+        if not os.path.exists(logcfg):
             raise RuntimeError(msgpfx + "File " + logcfg + " does not exist!")
 
         ## we also need to get the location of the dbxml output file.
         ## It's in the gcam.config file (we don't repeat it in the
         ## config for this module because then we would have no way to
         ## ensure consistency).
-        dbxmlfpat = re.compile(r'<Value name="dbFileName">(.*)</Value>')
+        dbxmlfpat = re.compile(r'<Value name="xmldb-location">(.*)</Value>')
         dbenabledpat = re.compile(r'<Value name="write-xml-db">(.*)</Value>')
         with open(cfg, "r") as cfgfile:
             ## we don't need to parse the whole config file; all we
             ## want is to locate the name of the output file make sure
             ## the dbxml output is turned on.
             dbxmlfile = None
-            for line in f:
+            for line in cfgfile:
                 ## the dbxml file name will come early in the file
                 match = dbxmlfpat.match(line.lstrip())
                 if match:
                     dbxmlfile = match.group(1)
                     break
 
+            print "dbxmlfile = %s" % dbxmlfile
             ## The file spec is a relative path, starting from the
             ## directory that contains the config file.
             dbxmlfile = os.path.join(self.workdir,dbxmlfile) 
             self.results["dbxml"] = dbxmlfile # This is our eventual output
-            if os.path.exists(dbxmlfile) and not self.clobber:
-                ## This is not an error; it just means we can leave
-                ## the existing output in place and return it.
-                self.results["changed"] = 0 # mark the cached results as clean
-                return 0
+            if os.path.exists(dbxmlfile):
+                if not self.clobber:
+                    ## This is not an error; it just means we can leave
+                    ## the existing output in place and return it.
+                    print "GcamModule:  results exist and no clobber.  Skipping."
+                    self.results["changed"] = 0 # mark the cached results as clean
+                    return 0
+                else:
+                    ## have to remove the dbxml, or we will merely append to it
+                    os.unlink(dbxmlfile)
 
             ## now make sure that the dbxml output is turned on
-            for line in f:
+            for line in cfgfile:
                 match = dbenabledpat.match(line.lstrip())
                 if match:
                     if match.group(1) != "1":
@@ -226,7 +232,7 @@ class GcamModule(GcamModuleBase):
 ### matlab -nodisplay -nosplash -nodesktop -r "run_future_hydro('<gcm>','<scenario>');exit" > & outputs/pcm-a1-out.txt < /dev/null
 class HydroModule(GcamModuleBase):
     def __init__(self, cap_tbl):
-        super(HydroModule, self).__init__(self, cap_tbl)
+        super(HydroModule, self).__init__(cap_tbl)
         cap_tbl["gcam-hydro"] = self
 
     def runmod(self):
@@ -253,20 +259,22 @@ class HydroModule(GcamModuleBase):
             raise RuntimeError(msgpfx + "missing input file: " + dtrfile)
 
         ## matlab files for future processing steps
-        qoutfile   = 'outputs/Avg_Runoff_235_' + gcm + '_' + scenario + '.mat'
-        flxoutfile = 'outputs/Avg_ChFlow_235_' + gcm + '_' + scenario + '.mat'
+        qoutfile   = workdir + '/outputs/Avg_Runoff_235_' + gcm + '_' + scenario + '.mat'
+        flxoutfile = workdir + '/outputs/Avg_ChFlow_235_' + gcm + '_' + scenario + '.mat'
         ## c-data files for final output
-        cqfile   = 'outputs/cdata/runoff_' + gcm + '_' + scenario + '.mat'
-        cflxfile = 'outputs/cdata/chflow_' + gcm + '_' + scenario + '.mat'
+        cqfile   = workdir + '/outputs/cdata/runoff_' + gcm + '_' + scenario + '.dat'
+        cflxfile = workdir + '/outputs/cdata/chflow_' + gcm + '_' + scenario + '.dat'
 
         ## Our result is the location of these output files.  Set that
         ## now, even though the files won't be created until we're
         ## done running.
-        results['qoutfile']   = qoutfile
-        results['flxoutfile'] = flxoutfile
-        results['cqfile']     = cqfile 
-        results['cflxfile']   = cflxfile
+        self.results['qoutfile']   = qoutfile
+        self.results['flxoutfile'] = flxoutfile
+        self.results['cqfile']     = cqfile 
+        self.results['cflxfile']   = cflxfile
 
+        print "output files\n\t%s\n\t%s\n\t%s\n\t%s\n" % (qoutfile, flxoutfile, cqfile, cflxfile)
+        
         if not self.clobber: 
             allfiles = 1
             for file in [qoutfile, flxoutfile, cqfile, cflxfile]:
@@ -275,6 +283,7 @@ class HydroModule(GcamModuleBase):
                     break
             if allfiles:
                 ## all files exist, and we don't want to clobber them
+                print "HydroModule:  results exist and no clobber.  Skipping."
                 self.results["changed"] = 0 # mark cached results as clean
                 return 0
 
@@ -285,7 +294,7 @@ class HydroModule(GcamModuleBase):
         ##       error code.  Yuck.
         print 'Running the matlab hydrology code'
         with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
-            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r', "run_future_hydro('" + gcm+ "','" + "a1');exit"]
+            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r', "run_future_hydro('%s','%s');exit" % (gcm, scenario)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
             return sp.wait()
     ## end of runmod()
@@ -304,7 +313,7 @@ class HydroModule(GcamModuleBase):
 ### matlab -nodisplay -nosplash -nodesktop -r "run_disaggregation('<runoff-file>', '<chflow-file>', '<gcam-filestem>');exit" >& <logfile> < /dev/null
 class WaterDisaggregationModule(GcamModuleBase):
     def __init__(self, depends):
-        super(WaterDisaggregationModule, self, cap_tbl).__init__(self, cap_tbl)
+        super(WaterDisaggregationModule, self, cap_tbl).__init__(cap_tbl)
         cap_tbl["water-disaggregation"] = self
 
     def runmod(self):
@@ -332,6 +341,7 @@ class WaterDisaggregationModule(GcamModuleBase):
                 break
 
         if allfiles and not clobber and not (gcam_rslts["changed"] or hydro_rslts["changed"]):
+            print "WaterDisaggregationModule: results exist and no clobber.  Skipping."
             self.results["changed"] = 0
             return 0
 

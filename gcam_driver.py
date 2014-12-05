@@ -1,3 +1,4 @@
+#!/bin/env python
 import re
 from gcam_modules import *
 
@@ -35,6 +36,7 @@ def gcam_parse(cfgfile_name):
                     ## create the new module:  the section name is the module class
                     ## TODO: is the input from the config file trusted enough to do it this way?
                     modcreate = "%s(capability_table)" % section
+                    print "modcreate statement:  %s\n" % modcreate
                     module = eval(modcreate)
                 else:
                     ## This is kind of a wart because I want to call
@@ -55,8 +57,8 @@ def gcam_parse(cfgfile_name):
             if not kvmatch:
                 raise RuntimeError("Malformed line in config file:\n%s"%line)
 
-            key = kvmatch.group(1)
-            val = kvmatch.group(2)
+            key = kvmatch.group(1).lstrip().rstrip()
+            val = kvmatch.group(2).lstrip().rstrip()
 
             print "parser got key= %s\tval= %s" % (key, val)
 
@@ -71,7 +73,6 @@ def gcam_parse(cfgfile_name):
 
     return (module_list, capability_table)
 ## end of gcam_parse
-
 
 if __name__ == "__main__":
     from sys import argv
