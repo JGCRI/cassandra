@@ -2,8 +2,12 @@ import os
 import os.path
 import re
 import subprocess
-#import threading
+import threading
+from sys import stdout
 from gcamutil import *
+
+## wrapper function that 
+
 ## Definitions for the modules for GCAM and associated downstream models
 
 
@@ -24,8 +28,13 @@ from gcamutil import *
 ####           successful completion.  Note that we don't make any
 ####           effort to limit the number of concurrent threads beyond
 ####           the inherent limitations imposed by data dependencies
-####           between the modules.  
+####           between the modules.  This method returns the thread
+####           object, mainly so that the driver can call join() on
+####           all of the module threads. 
 ####           TODO: implement an active thread counter.
+
+#### runmod_wrapper(): used internally by run().  Don't monkey around
+####           with this function.
 
 ####  fetch(): retrieve the module's results.  If the module hasn't
 ####           completed yet, wait to be notified of completion.  This
@@ -59,10 +68,10 @@ from gcamutil import *
 #### Methods that can be overridden freely
 
 #### runmod(): function that does the module's work.  It should only
-####           be called from the run() method, which performs the
+####           be called from the runmod_wrapper() method via the
+####           run() method.  Together, these methods perform the
 ####           additional bookkeeping required to ensure that modules
-####           don't try to use results before they are ready.  The
-####           base class version raises a NotImplementedError.
+####           don't try to use results before they are ready.
 
 
 #### Attributes:
@@ -78,22 +87,49 @@ class GcamModuleBase(object):
         self.params  = {}
         self.results["changed"] = 1
         self.cap_tbl = cap_tbl # store a reference to the capability lookup table
+        self.condition = threading.Condition()
 
     def run(self):
-        ## TODO: have this run in a separate thread 
-        self.runmod()
-        self.complete = 1
+        ## TODO: have this run in a separate thread
+        thread = threading.Thread(target=lambda: self.runmod_wrapper())
+        thread.start()
+        ## returns immediately
+        return thread
 
+    ## This wrapper locks the condition variable, executes the runmod
+    ## function, and unlocks when the runmod function returns.  The
+    ## way we currently have it implemented, if there is some sort of
+    ## error, we don't set the complete variable or notify waiting
+    ## threads.  This will cause a deadlock.  We should handle this
+    ## more gracefully.  This function should only ever be called from
+    ## the run() method above.
+    def runmod_wrapper(self):
+        with self.condition:
+            rv = self.runmod()
+            if not rv==0:
+                ## possibly add some other error handling here.
+                raise RuntimeError("%s:  runmod returned error code %d" % (self.__class__, rv))
+            else:
+                stdout.write("%s: finished successfully.\n"%(self.__class__))
+
+            self.complete = 1
+            self.condition.notify_all()
+        ## end of with block:  lock on condition var released.
+        
     def fetch(self):
         ## get the results of the calculation.  These aren't returned
-        ## from run() because it may run asynchronously.  This method
+        ## from run() because it will run asynchronously.  This method
         ## waits if necessary and returns the results.
-        if complete==0:
-            ## once asynchronous components are implemented, we will
-            ## wait() here.  For now, we just run the module in the
-            ## current thread.
-            self.run()
-        
+        with self.condition:
+            if not self.complete:
+                print "\twaiting on %s\n" % self.__class__
+                self.condition.wait()
+                if not self.complete:
+                    ## once we've waited, the complete flag should be
+                    ## set.  If it isn't, then something has gone
+                    ## horribly wrong.
+                    raise RuntimeError("%s: wait() returned with complete not set!"%self.__class__)
+        ## end of with block:  lock is released 
         return self.results
 
     def finalize_parsing(self):
@@ -114,8 +150,16 @@ class GcamModuleBase(object):
         ## config file parser.
         self.params[key] = value
 
+    def finish(self):
+        ## acquire a lock and release at the end of the block
+        with self.condition:
+            self.complete = 1
+            self.condition.notify_all()
+        ## end of with block:  lock is released
+
     def runmod(self):
-        raise NotImplementedError("GcamModuleBase is not a runnable class.")
+        raise NotImplementedError("GcamModuleBase is not a runnable class.") 
+
 
 ## class to hold the general parameters.  Technically this isn't a
 ## module as such; it doesn't run anything, but treating it as a
@@ -131,7 +175,7 @@ class GlobalParamsModule(GcamModuleBase):
         self.complete = 1       # nothing to do, so we're always complete
         
     def runmod(self):
-        pass                    # nothing to do because all we want to return is a copy of the params array
+        pass                    # nothing to do here.
 
 ## class for the module that actually runs gcam
 ## params: 
@@ -184,7 +228,7 @@ class GcamModule(GcamModuleBase):
                     dbxmlfile = match.group(1)
                     break
 
-            print "dbxmlfile = %s" % dbxmlfile
+            print "%s:  dbxmlfile = %s" % (self.__class__, dbxmlfile)
             ## The file spec is a relative path, starting from the
             ## directory that contains the config file.
             dbxmlfile = os.path.join(self.workdir,dbxmlfile) 
@@ -240,7 +284,7 @@ class HydroModule(GcamModuleBase):
         gcm      = self.params["gcm"]
         scenario = self.params["scenario"]
         logfile  = self.params["logfile"]
-        
+
         os.chdir(workdir)
         
         ## we need to check existence of input and output files
@@ -285,7 +329,7 @@ class HydroModule(GcamModuleBase):
                 ## all files exist, and we don't want to clobber them
                 print "HydroModule:  results exist and no clobber.  Skipping."
                 self.results["changed"] = 0 # mark cached results as clean
-                return 0
+                return 0        # success code
 
         ## Run the matlab code.
         ## TODO: eventually we need to move away from matlab, as it is not a
@@ -296,7 +340,7 @@ class HydroModule(GcamModuleBase):
         with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r', "run_future_hydro('%s','%s');exit" % (gcm, scenario)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
-            return sp.wait()
+        return sp.wait()
     ## end of runmod()
         
 ## class for the water disaggregation code

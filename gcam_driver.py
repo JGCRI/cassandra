@@ -1,5 +1,6 @@
 #!/bin/env python
 import re
+import threading
 from gcam_modules import *
 
 ## usage: gcam_driver.py <configfile> 
@@ -83,9 +84,15 @@ if __name__ == "__main__":
     ## global parameters here, but in the current version we don't
     ## have any global parameters to process, so skip it.
 
+    threads = []
+    
     for module in modlist:
         print "running %s" % module.__class__
-        module.run()
+        threads.append(module.run())
 
+    ## Wait for all threads to complete before printing end message.
+    for thread in threads:
+        thread.join()
+        
     print "FIN."
     
