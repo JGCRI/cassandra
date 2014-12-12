@@ -361,6 +361,7 @@ class WaterDisaggregationModule(GcamModuleBase):
         cap_tbl["water-disaggregation"] = self
 
     def runmod(self):
+        import waterdisag
 
         workdir  = self.params["workdir"]
         os.chdir(workdir)
@@ -370,7 +371,8 @@ class WaterDisaggregationModule(GcamModuleBase):
 
         runoff_file   = hydro_rslts["qoutfile"]
         chflow_file   = hydro_rslts["flxoutfile"]
-        gcam_filestem = gcam_rslts["gcam-filestem"]
+        #gcam_filestem = gcam_rslts["gcam-filestem"]
+        gcam_dir      = "gcam-inputs/"
         workdir       = self.params["workdir"]
         outputdir     = self.params["outputdir"]
         scenariotag   = self.params["scenario"]
@@ -389,6 +391,33 @@ class WaterDisaggregationModule(GcamModuleBase):
             self.results["changed"] = 0
             return 0
 
+        ## TODO run the gcam queries pull the water demand information out of the dbxml
+        
+        ### reformat the GCAM outputs into the files the matlab code needs 
+        ### note all the csv files referred to here are temporary
+        ### files.  On the input side the names need to match the ones
+        ### used in the configuration of the gcam model interface
+        ### queries, and on the output side they must match the ones
+        ### used in the matlab disaggregation code.
+
+        ## non-ag demands
+        wddom   = waterdisag.proc_wdnonag("gcam-wddom.csv", gcam_dir+"withd_dom.csv")
+        wdelec  = waterdisag.proc_wdnonag("gcam-wdelec.csv", gcam_dir+"withd_elec.csv")
+        wdman   = waterdisag.proc_wdnonag("gcam-wdman.csv", gcam_dir+"withd_manuf.csv")
+        wdmin   = waterdisag.proc_wdnonag("gcam-wdmin.csv", gcam_dir+"withd_mining.csv")
+        wdnonag = waterdisag.proc_wdnonag_total(gcam_dir+"withd_nonAg.csv", wddom, wdelec, wdman, wdmin)
+
+        ## population data
+        waterdisag.proc_pop("gcam-pop.csv", gcam_dir+"pop_fac.csv", gcam_dir+"pop_tot.csv")
+
+        ## livestock demands
+        wdliv  = waterdisag.proc_wdlivestock("gcam-wdliv.csv", gcam_dir+"withd_liv.csv")
+
+        ## agricultural demands and auxiliary quantities
+        waterdisag.proc_irr_share(gcam_dir+"irrS.csv")
+        waterdisag.proc_ag_area("gcam-agarea.csv", gcam_dir+"irrA.csv")
+        waterdisag.proc_ag_vol("gcam-agvol.csv", gcam_dir+"withd_irrV.csv")
+        
         ## Run the disaggregation model 
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:
             arglist = ["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r",
