@@ -278,6 +278,7 @@ class HydroModule(GcamModuleBase):
     def __init__(self, cap_tbl):
         super(HydroModule, self).__init__(cap_tbl)
         cap_tbl["gcam-hydro"] = self
+        gcamutil.genparams = self.params
 
     def runmod(self):
         workdir  = self.params["workdir"]

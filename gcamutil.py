@@ -1,6 +1,7 @@
 import os
 import re
 import subprocess
+import tempfile
 
 ## utility functions used in other gcam python code
 
@@ -34,14 +35,36 @@ def scenariofix(line, newstr="scenario", pat=scen_pattern):
     return pat.sub(line, newstr)
 
 ### Run the indicated queries against a dbxml database
-###  dbxml:           the dbxml file to query
 ###  queryfiles:      list of xml files containing the batch queries to run.  If
 ###                   there is only one, you can just pass the filename
-def gcam_query(dbxml, queryfiles):
+###  dbxmlfiles:      list of dbxml file or files to query.  If there is only
+###                   one, you can just pass the filename.  If there
+###                   is a list of query files and only a single
+###                   dbxml, the queries will all be run against the
+###                   same dbxml.
+### outfiles:         list of output files.  should be the same length as
+###                   the query list.
+def gcam_query(queryfiles, dbxmlfiles, outfiles):
     if hasattr(queryfiles,'__iter__'):
         qlist = queryfiles
     else:
         qlist = [queryfiles]
+
+    if hasattr(dbxmlfiles, '__iter__'):
+        dbxmllist = dbxmlfiles
+        if len(dbxmllist) == 1:
+            dbxmllist = dbxmllist*len(qlist)
+    else:
+        dbxmllist = [dbxmlfiles]*len(qlist)
+
+    if hasattr(outfiles, '__iter__'):
+        outlist = outfiles
+    else:
+        outlist = [outfiles]
+
+    ## check for agreement in lengths of the above lists
+    if len(dbxmllist) != len(qlist) or len(outlist) != len(qlist):
+        raise RuntimeError("Mismatch in input lengths for gcam_query.") 
 
     ModelInterface = genparams["ModelInterface"]
     DBXMLlib       = genparams["DBXMLlib"]
@@ -49,21 +72,57 @@ def gcam_query(dbxml, queryfiles):
     ## start up the virtual frame buffer.  The Model Interface needs
     ## this even though it won't be displaying anything.
     xvfb = subprocess.Popen(['Xvfb', ':1', '-pn', '-audit', '4', '-screen', '0', '800x600x16'])
-    ldlibpath = os.getenv('LD_LIBRARY_PATH')
-    if ldlibpath is None:
-        ldlibpath = "LD_LIBRARY_PATH=%s"%DBXMLlib
-    else:
-        ldlibpath = "LD_LIBRARY_PATH=%s:%s" % (ldlibpath,DBXMLlib) 
-        
-    for query in qlist:
-        execlist = ['/bin/env', 'DISPLAY=:1.0', ldlibpath, 'java', '-jar',
-                    ModelInterface, '-b', query]
+    try:
+        ldlibpath = os.getenv('LD_LIBRARY_PATH')
+        if ldlibpath is None:
+            ldlibpath = "LD_LIBRARY_PATH=%s"%DBXMLlib
+        else:
+            ldlibpath = "LD_LIBRARY_PATH=%s:%s" % (ldlibpath,DBXMLlib) 
 
-        subprocess.call(execlist)
+        for (query, dbxml, output) in zip(qlist,dbxmllist,outlist):
+            ## make a temporary file
+            tempquery = None
+            try:
+                tempquery = rewrite_query(query, dbxml, output)
+                execlist = ['/bin/env', 'DISPLAY=:1.0', ldlibpath, 'java', '-jar',
+                            ModelInterface, '-b', tempquery]
 
-    xvfb.kill()
+                subprocess.call(execlist)
+
+            finally:
+                if tempquery:
+                    os.unlink(tempquery)
+    finally:
+        xvfb.kill()
 
     ## output from these queries goes into csv files.  The names of
     ## these files are in the query file, so it's up to the caller to
     ## know or figure out where its data will be.
-    return                      # no return value.
+    return outlist              # probably redundant, since the list of output files was an argument.
+
+## The name of the input dbxml file is encoded in the query file.
+## Since we want to be able to set it, we need to treat the query file
+## as a template and create a temporary with the real file name.  This
+## function creates the temporary and returns its name.
+
+### Some regular expressions used in query_file_rewrite:
+xmldbloc   = re.compile(r'<xmldbLocation>(.+)</xmldbLocation>')
+outfileloc = re.compile(r'<outFile>(.+)</outFile>')
+def rewrite_query(query, dbxml, outfile):
+    (fd, tempqueryname) = tempfile.mkstemp(suffix='.xml') 
+
+    ## copy the input query file line by line into the temp
+    ## file; however, edit the xmldb and output locations to
+    ## match the arguments.
+    origquery = open(query,"r")
+    tempquery = os.fdopen(fd,"w")
+    
+    for line in origquery:
+        xmldbloc.sub(dbxml, line)
+        outfileloc.sub(outfile, line)
+        tempquery.write(line)
+
+    tempquery.close()
+    return tempqueryname
+
+        

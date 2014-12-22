@@ -341,7 +341,7 @@ def proc_ag_area(infilename, outfilename):
 ##    scenario, region (text), crop (text), input, sector (crop+AEZ), 1990, 2005, 2010, ..., 2095, units
 ## Output format is:
 ##   region-number, aez-number, crop-number, 1990, 2005, 2010, ..., 2095
-def rd_ag_vol(infilename, outfilename):
+def proc_ag_vol(infilename, outfilename):
     with open(outfilename,"w") as outfile:
         with open(infilename,"r") as infile:
             ## 2 header lines to discard
@@ -368,4 +368,4 @@ def rd_ag_vol(infilename, outfilename):
 
                 outfile.write(','.join(data))
                 outfile.write('\n')
-## end of rd_ag_vol
+## end of proc_ag_vol
