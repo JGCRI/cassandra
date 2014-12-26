@@ -1,0 +1,25 @@
+<queries>
+    <aQuery>
+      <region name="USA"/> 
+      <region name="Canada"/>
+      <region name="Western Europe"/>
+      <region name="Japan"/>
+      <region name="Australia_NZ"/>
+      <region name="Former Soviet Union"/>
+      <region name="China"/>
+      <region name="Middle East"/>
+      <region name="Africa"/>
+      <region name="Latin America"/>
+      <region name="Southeast Asia"/>
+      <region name="Eastern Europe"/>
+      <region name="Korea"/>
+      <region name="India"/>
+      <query title="Crop Land Allocation">
+         <axis1 name="land-allocation">LandLeaf</axis1>
+         <axis2 name="Year">land-allocation[@year]</axis2>
+         <xPath buildList="true" dataName="land-allocation" group="false" sumAll="false">/LandNode[@name='root' or @type='LandNode' (: collapse :)]//LandNode[starts-with(@name, 'CropLand')]//LandLeaf[not(starts-with(@name, 'OtherArableLand'))]/land-allocation/text()</xPath>
+         <comments/>
+      </query>
+    </aQuery>
+</queries>
+

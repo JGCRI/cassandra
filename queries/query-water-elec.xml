@@ -1,0 +1,25 @@
+<queries>
+    <aQuery>
+      <region name="USA"/> 
+      <region name="Canada"/>
+      <region name="Western Europe"/>
+      <region name="Japan"/>
+      <region name="Australia_NZ"/>
+      <region name="Former Soviet Union"/>
+      <region name="China"/>
+      <region name="Middle East"/>
+      <region name="Africa"/>
+      <region name="Latin America"/>
+      <region name="Southeast Asia"/>
+      <region name="Eastern Europe"/>
+      <region name="Korea"/>
+      <region name="India"/>
+      <supplyDemandQuery title="Water Withdrawals (Industrial - Electricity)">
+         <axis1 name="sector">sector</axis1>
+         <axis2 name="Year">demand-physical[@vintage]</axis2>
+         <xPath buildList="false" dataName="input" group="false" sumAll="true">*[@type='sector' and not(local-name()='AgSupplySector') and not(@name='domestic water') and not(@name='industrial energy use' or @name='industrial feedstocks' or @name='industry') and not(@name='Beef' or @name='Dairy' or @name='Pork' or @name='Poultry' or @name='SheepGoat')]//*[@type='input' and contains(@name,'water withdrawals')]/demand-physical/node()</xPath>
+         <comments>Supply sectors only.</comments>
+      </supplyDemandQuery>
+    </aQuery>
+</queries>
+
