@@ -17,7 +17,7 @@
 *.exe
 *.out
 *.app
-mat2nc
+
 
 # OS-specific files
 .DS_Store
@@ -37,10 +37,10 @@ mat2nc
 # LibreOffice lock files
 .~lock*
 
-# Output netcdf files
+# Output 
 *.nc
+output/
+model_interface.properties
 
-# Directory for misc stuff that we are not tracking
-extra-data
-
-
+# original query file
+Main_queries_water.xml

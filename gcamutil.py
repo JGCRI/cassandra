@@ -106,8 +106,8 @@ def gcam_query(queryfiles, dbxmlfiles, outfiles):
 ## function creates the temporary and returns its name.
 
 ### Some regular expressions used in query_file_rewrite:
-xmldbloc   = re.compile(r'<xmldbLocation>(.+)</xmldbLocation>')
-outfileloc = re.compile(r'<outFile>(.+)</outFile>')
+xmldbloc   = re.compile(r'<xmldbLocation>.*</xmldbLocation>')
+outfileloc = re.compile(r'<outFile>.*</outFile>')
 def rewrite_query(query, dbxml, outfile):
     (fd, tempqueryname) = tempfile.mkstemp(suffix='.xml') 
 
@@ -116,11 +116,16 @@ def rewrite_query(query, dbxml, outfile):
     ## match the arguments.
     origquery = open(query,"r")
     tempquery = os.fdopen(fd,"w")
+
+    dbxmlstr = '<xmldbLocation>' + dbxml + '</xmldbLocation>'
+    outfilestr = '<outFile>' + outfile + '</outFile>'
     
     for line in origquery:
-        xmldbloc.sub(dbxml, line)
-        outfileloc.sub(outfile, line)
+        line = xmldbloc.sub(dbxmlstr, line)
+        line = outfileloc.sub(outfilestr, line)
         tempquery.write(line)
+
+        print line
 
     tempquery.close()
     return tempqueryname
