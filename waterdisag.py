@@ -36,12 +36,9 @@ def rd_gcam_table(filename, njunk=0):
 
         for line in file:
             line = gcamutil.rm_trailing_comma(line)
-            print 'line: %s' % line 
             linefix = gcamutil.scenariofix(line)
-            print 'linefix: %s' % linefix
             ## split off the first two columns
             linesplit = linefix.split(',',2+njunk)
-            print "linesplit: %s  %s  %s" % (linesplit[0], linesplit[1], linesplit[-1])
 
             region = linesplit[1] 
             # trim the final (units) column.  Note that this will also
@@ -75,7 +72,6 @@ def proc_wdnonag(infile, outfile):
 def proc_wdnonag_total(outfile, wddom, wdelec, wdmanuf, wdmining):
     wdnonag = {}
     for region in regions_ordered:
-        print wddom[region]
         dom    = map(float, wddom[region].split(','))
         elec   = map(float, wdelec[region].split(','))
         manuf  = map(float, wdmanuf[region].split(','))
@@ -250,7 +246,7 @@ biomasslist = ["eucalyptus", "Jatropha", "miscanthus", "willow", "biomassOil"]
 
 ## read the irrigation share table.  The table format is:
 ##   region(#), aez, crop(#), 1990, 2005, 2010, ..., 2095, region(text), crop(text)
-def proc_irr_share(outfile):
+def proc_irr_share(infilename, outfile):
     ## initialize table with zeros.  Any combination not contained in
     ## the table will default to 0.
     irr_share = {}
@@ -262,7 +258,7 @@ def proc_irr_share(outfile):
     years.insert(0,1990)
 
     ## irrigation share is a fixed input, so the filename never changes.
-    with open("irrigation-share.csv","r") as infile:
+    with open(infilename,"r") as infile:
         ## skip 3 header lines
         infile.readline()
         infile.readline()
@@ -294,7 +290,7 @@ def proc_irr_share(outfile):
 ##   scenario, region, land-allocation (==crop+aez), 1990, 2005, 2010, ..., 2095, units
 ## The output we want is:
 ##   region-number, aez-number, crop-number, 1990, 2005, 2010, ..., 2095
-lasplit = re.compile(r'([a-zA-Z]+)AEZ([0-9]+)')
+lasplit = re.compile(r'([a-zA-Z_]+)AEZ([0-9]+)')
 def proc_ag_area(infilename, outfilename):
     with open(outfilename,"w") as outfile:
         with open(infilename,"r") as infile:
@@ -304,6 +300,7 @@ def proc_ag_area(infilename, outfilename):
 
             for line in infile:
                 line = gcamutil.rm_trailing_comma(gcamutil.scenariofix(line))
+                print line
                 fields = line.split(',')
                 rgntxt = fields[1]
                 latxt  = fields[2]
@@ -327,9 +324,10 @@ def proc_ag_area(infilename, outfilename):
                 data.insert(0,aezno)
                 data.insert(0,rgnno)
 
+                print data
                 ## data go out in the same order they came in; we
                 ## don't sort by region.
-                outfile.write(','.join(data))
+                outfile.write(','.join(map(str,data)))
                 outfile.write('\n')
 ## done with rd_ag_area
 
@@ -351,20 +349,26 @@ def proc_ag_vol(infilename, outfilename):
                 line    = gcamutil.rm_trailing_comma(gcamutil.scenariofix(line))
                 fields  = line.split(',')
                 rgntxt  = fields[1]
-                croptxt = fields[2] # has biomass-equivalents as biomass
+                croptxt = fields[2] 
                 sector  = fields[4]
                 data    = fields[5:-1]
 
                 rgnno    = regions_ordered.index(rgntxt) + 1
-                cropno   = croplist.index(croptxt) + 1
                 secmatch = lasplit.match(sector)
                 aezno    = int(secmatch.group(2))
+                try:
+                    cropno   = croplist.index(croptxt) + 1
+                except ValueError as e:
+                    if croptxt in biomasslist:
+                        cropno = croplist.index('biomass')
+                    else:
+                        raise
 
                 ## prepend the region, aez, and crop numbers to the data
                 data.insert(0, cropno)
                 data.insert(0, aezno)
                 data.insert(0, rgnno)
 
-                outfile.write(','.join(data))
+                outfile.write(','.join(map(str,data)))
                 outfile.write('\n')
 ## end of proc_ag_vol

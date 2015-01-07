@@ -32,5 +32,9 @@ wd_tot  = waterdisag.proc_wdnonag_total('output/final_wd_total.csv', wd_dom, wd_
 ## process livestock water demand
 wd_liv  = waterdisag.proc_wdlivestock('output/batch-water-livestock.csv', 'output/final_wd_liv.csv')
 
-
+## process ag water demand
+irrS    = waterdisag.proc_irr_share('input-data/irrigation-frac.csv', 'output/irrS.csv')
+## no tables returned by these next two.  Maybe we should return them for consistency?
+waterdisag.proc_ag_area('output/batch-land-alloc.csv', 'output/final_ag_area.csv')
+waterdisag.proc_ag_vol('output/batch-water-ag.csv', 'output/final_wd_ag.csv')
 
