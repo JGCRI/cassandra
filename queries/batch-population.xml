@@ -1,7 +1,7 @@
 <ModelInterfaceBatch>
     <class name="ModelInterface.ModelGUI2.DbViewer">
         <command name="XMLDB Batch File">
-            <queryFile>/lustre/data/rpl/gcam-driver/queries/query-populaton.xml</queryFile>
+            <queryFile>/lustre/data/rpl/gcam-driver/queries/query-population.xml</queryFile>
             <outFile>/lustre/data/rpl/gcam-driver/output/population.csv</outFile>
             <xmldbLocation>/lustre/data/rpl/gcam-newlogit/output/database.dbxml</xmldbLocation>
             <batchQueryResultsInDifferentSheets>false</batchQueryResultsInDifferentSheets>
