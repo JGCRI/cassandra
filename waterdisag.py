@@ -23,33 +23,30 @@ gis2000 = {"Africa" : 813123731,
            "USA" : 282494918,
            "Western Europe" : 448082681}
 
-
 ## Read the data from a csv file generated as gcam output.  Only some
 ## GCAM tables have this format.  Right now the ones that do include
 ## population and non-ag water withdrawals
-def rd_gcam_table(filename):
+## njunk is the number of junk columns after the region column
+def rd_gcam_table(filename, njunk=0):
     table = {}
     with open(filename,"r") as file:
         ## skip first two lines, which are headers
         file.readline()
-        hdr = file.readline()
-        if hdr.find("1975"):
-            has1975 = True
-        else:
-            has1975 = False
+        file.readline()
 
         for line in file:
+            line = gcamutil.rm_trailing_comma(line)
+            print 'line: %s' % line 
             linefix = gcamutil.scenariofix(line)
+            print 'linefix: %s' % linefix
             ## split off the first two columns
-            linesplit = linefix.split(',',2)
-            print "linesplit: %s  %s  %s" % (linesplit[0], linesplit[1], linesplit[2])
+            linesplit = linefix.split(',',2+njunk)
+            print "linesplit: %s  %s  %s" % (linesplit[0], linesplit[1], linesplit[-1])
 
             region = linesplit[1] 
             # trim the final (units) column.  Note that this will also
             # trim off the newline.
-            data = (linesplit.rpartition(','))[0]
-            if has1975:
-                data = (data.partition(','))[2] # remove 1975 column
+            data = (linesplit[-1].rpartition(','))[0]
                 
             table[region] = data
 
@@ -62,34 +59,35 @@ def table_output_ordered(filename, table, incl_region=False):
     with open(filename,"w") as file:
         for region in regions_ordered:
             if incl_region:
-                file.write("%s,%s\n") % (region, table[region])
+                file.write("%s,%s\n" % (region, table[region]))
             else:
-                file.write("%s\n") % table[region]
+                file.write("%s\n" % table[region])
     return
 
     
 ## process the non-ag water demand.  Return the table so that we can compute
 ## the aggregated water demand
 def proc_wdnonag(infile, outfile):
-    table = rd_gcam_table(infile)
+    table = rd_gcam_table(infile,2)
     table_output_ordered(outfile, table)
     return table
 
 def proc_wdnonag_total(outfile, wddom, wdelec, wdmanuf, wdmining):
     wdnonag = {}
     for region in regions_ordered:
-        dom    = float(wddom[region].split(','))
-        elec   = float(wdelec[region].split(','))
-        manuf  = float(wdmanuf[region].split(','))
-        mining = float(wdmining[region].split(','))
+        print wddom[region]
+        dom    = map(float, wddom[region].split(','))
+        elec   = map(float, wdelec[region].split(','))
+        manuf  = map(float, wdmanuf[region].split(','))
+        mining = map(float, wdmining[region].split(','))
 
         tot = map(lambda d,e,ma,mi: d+e+ma+mi , dom, elec, manuf, mining)
-        wdnonag[region] = ','.join(tot)
+        wdnonag[region] = ','.join(map(str,tot))
     table_output_ordered(outfile, wdnonag)
     return wdnonag 
     
 def proc_pop(infile, outfile_fac, outfile_tot): 
-    poptbl = rd_gcam_table(infile)
+    poptbl = rd_gcam_table(infile,1)
     pop_fac = {}
     pop_tot = {}
 
@@ -173,7 +171,7 @@ def proc_wdlivestock(infilename, outfilename):
         infile.readline()
 
         for line in infile:
-            line = gcamutil.scenariofix(line)
+            line = gcamutil.rm_trailing_comma(gcamutil.scenariofix(line))
             fields = line.split(',',4) # leave the yearly data in one big string for a moment
             region = fields[1]
             sector = fields[3]
@@ -193,24 +191,24 @@ def proc_wdlivestock(infilename, outfilename):
     pig     = {}
     ## loop over regions and compute the withdrawals for each livestock type
     for region in regions_ordered:
-        total_bovine    = map(lambda x,y: x+y, wdliv_table(region,"Beef"), wdliv_table(region,"Dairy"))
+        total_bovine    = map(lambda x,y: x+y, wdliv_table[(region,"Beef")], wdliv_table[(region,"Dairy")])
         bfac            = bfracFAO2005[region]
         buffalo[region] = map(lambda x: bfac*x, total_bovine)
         cattle[region]  = map(lambda x: (1-bfac)*x, total_bovine)
 
         gfac          = gfracFAO2005[region]
-        sheepgoat     = wdliv_table(region,"SheepGoat")
+        sheepgoat     = wdliv_table[(region,"SheepGoat")]
         goat[region]  = map(lambda x: gfac*x, sheepgoat)
         sheep[region] = map(lambda x: (1-gfac)*x, sheepgoat)
 
-        poultry[region] = wdliv_table(region,"Poultry")
-        pig[region]     = wdliv_table(region,"Pork") 
+        poultry[region] = wdliv_table[(region,"Poultry")]
+        pig[region]     = wdliv_table[(region,"Pork")]
     ## end of loop over regions
 
     ## write out each table.  the order is:
     ##   buffalo, cattle, goat, sheep, poultry, pig
     with open(outfilename,"w") as outfile:
-        for table in [buffalo, cattle, sheep, goat, poultry, pig]:
+        for table in [buffalo, cattle, goat, sheep, poultry, pig]:
             wtbl_numeric(outfile, table)
     ## end of write-out
 
@@ -271,6 +269,7 @@ def proc_irr_share(outfile):
         infile.readline()
 
         for line in infile:
+            line   = gcamutil.rm_trailing_comma(line)
             fields = line.split(',')
             crop   = fields.pop()
             region = fields.pop()
@@ -304,7 +303,7 @@ def proc_ag_area(infilename, outfilename):
             infile.readline()
 
             for line in infile:
-                line = gcamutil.scenariofix(line)
+                line = gcamutil.rm_trailing_comma(gcamutil.scenariofix(line))
                 fields = line.split(',')
                 rgntxt = fields[1]
                 latxt  = fields[2]
@@ -349,7 +348,7 @@ def proc_ag_vol(infilename, outfilename):
             infile.readline()
 
             for line in infile:
-                line    = gcamutil.scenariofix(line)
+                line    = gcamutil.rm_trailing_comma(gcamutil.scenariofix(line))
                 fields  = line.split(',')
                 rgntxt  = fields[1]
                 croptxt = fields[2] # has biomass-equivalents as biomass

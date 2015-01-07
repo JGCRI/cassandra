@@ -32,7 +32,7 @@ def scenariofix(line, newstr="scenario", pat=scen_pattern):
     ## newstr is the string to substitute in place of the quoted scenario field
     ## pat is the pattern to use for detecting the scenario field.  It should
     ## be very rare to need to change it.
-    return pat.sub(line, newstr)
+    return pat.sub(newstr, line)
 
 ### Run the indicated queries against a dbxml database
 ###  queryfiles:      list of xml files containing the batch queries to run.  If
@@ -80,6 +80,7 @@ def gcam_query(queryfiles, dbxmlfiles, outfiles):
             ldlibpath = "LD_LIBRARY_PATH=%s:%s" % (ldlibpath,DBXMLlib) 
 
         for (query, dbxml, output) in zip(qlist,dbxmllist,outlist):
+            print query, output
             ## make a temporary file
             tempquery = None
             try:
@@ -125,9 +126,11 @@ def rewrite_query(query, dbxml, outfile):
         line = outfileloc.sub(outfilestr, line)
         tempquery.write(line)
 
-        print line
-
     tempquery.close()
     return tempqueryname
 
         
+## regex for removing trailing commas
+trlcomma = re.compile(r',\s*$')
+def rm_trailing_comma(line):
+    return trlcomma.sub('',line)
