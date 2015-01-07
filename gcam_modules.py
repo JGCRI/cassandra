@@ -372,16 +372,17 @@ class WaterDisaggregationModule(GcamModuleBase):
 
         runoff_file   = hydro_rslts["qoutfile"]
         chflow_file   = hydro_rslts["flxoutfile"]
-        #gcam_filestem = gcam_rslts["gcam-filestem"]
-        gcam_dir      = "gcam-inputs/"
+        dbxmlfile     = gcam_rslts["dbxml"]
         workdir       = self.params["workdir"]
         outputdir     = self.params["outputdir"]
+        inputdir      = self.params["inputdir"] # static inputs, such as irrigation share and query files.
         scenariotag   = self.params["scenario"]
+        tempdir       = outputdir # location of intermediate files.  Consider making separate from the output dir
 
-        vars = ["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmanuf", "wdmining", "wsi"]
+        vars = ["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi"]
         allfiles = 1
         for var in vars:
-            filename = "%s/%s-%s.dat" % (outputdir, var, scenariotag)
+            filename = "%s/%s-%s.dat" % (tempdir, var, scenariotag)
             self.results[var] = filename
             if not os.path.exists(filename):
                 allfiles = 0
@@ -392,7 +393,25 @@ class WaterDisaggregationModule(GcamModuleBase):
             self.results["changed"] = 0
             return 0
 
-        ## TODO run the gcam queries pull the water demand information out of the dbxml
+        ## Helper function generator
+        def get_dir_prepender(dir):
+            if dir[-1]=='/':
+                return lambda file: dir+file
+            else:
+                return lambda file: dir+'/'+file
+
+        inputdirprep  = get_dir_prepender(inputdir)
+        tempdirprep = get_dir_prepender(tempdir)
+            
+        queryfiles = ['batch-land-alloc.xml', 'batch-population.xml', 'batch-water-ag.xml',
+                      'batch-water-dom.xml', 'batch-water-elec.xml', 'batch-water-livestock.xml',
+                      'batch-water-mfg.xml', 'batch-water-mining.xml']
+        outfiles   = ['batch-land-alloc.csv', 'batch-population.csv', 'batch-water-ag.csv',
+                      'batch-water-dom.csv', 'batch-water-elec.csv', 'batch-water-livestock.csv',
+                      'batch-water-mfg.csv', 'batch-water-mining.csv']
+        queryfiles = map(inputdirprep, queryfiles)
+        outfiles = map(tempdirprep, outfiles)
+        gcamutil.gcam_query(queryfiles, dbxmlfile, outfiles)
         
         ### reformat the GCAM outputs into the files the matlab code needs 
         ### note all the csv files referred to here are temporary
@@ -401,29 +420,30 @@ class WaterDisaggregationModule(GcamModuleBase):
         ### queries, and on the output side they must match the ones
         ### used in the matlab disaggregation code.
 
-        ## non-ag demands
-        wddom   = waterdisag.proc_wdnonag("gcam-wddom.csv", gcam_dir+"withd_dom.csv")
-        wdelec  = waterdisag.proc_wdnonag("gcam-wdelec.csv", gcam_dir+"withd_elec.csv")
-        wdman   = waterdisag.proc_wdnonag("gcam-wdman.csv", gcam_dir+"withd_manuf.csv")
-        wdmin   = waterdisag.proc_wdnonag("gcam-wdmin.csv", gcam_dir+"withd_mining.csv")
-        wdnonag = waterdisag.proc_wdnonag_total(gcam_dir+"withd_nonAg.csv", wddom, wdelec, wdman, wdmin)
+        ## non-ag demands (sadly, I didn't think to put the lists
+        ## above in the order we were planning to use them.)
+        wddom   = waterdisag.proc_wdnonag(outfiles[3], tempdirprep("withd_dom.csv"))
+        wdelec  = waterdisag.proc_wdnonag(outfiles[4], tempdirprep("withd_elec.csv"))
+        wdman   = waterdisag.proc_wdnonag(outfiles[6], tempdirprep("withd_mfg.csv"))
+        wdmin   = waterdisag.proc_wdnonag(outfiles[7], tempdirprep("withd_min.csv"))
+        wdnonag = waterdisag.proc_wdnonag_total(tempdirprep("withd_nonAg.csv"), wddom, wdelec, wdman, wdmin)
 
         ## population data
-        waterdisag.proc_pop("gcam-pop.csv", gcam_dir+"pop_fac.csv", gcam_dir+"pop_tot.csv")
+        waterdisag.proc_pop(outfiles[1], tempdirprep("pop_fac.csv"), tempdirprep("pop_tot.csv"))
 
         ## livestock demands
-        wdliv  = waterdisag.proc_wdlivestock("gcam-wdliv.csv", gcam_dir+"withd_liv.csv")
+        wdliv  = waterdisag.proc_wdlivestock(outfiles[5], tempdirprep("withd_liv.csv"))
 
         ## agricultural demands and auxiliary quantities
-        waterdisag.proc_irr_share(gcam_dir+"irrS.csv")
-        waterdisag.proc_ag_area("gcam-agarea.csv", gcam_dir+"irrA.csv")
-        waterdisag.proc_ag_vol("gcam-agvol.csv", gcam_dir+"withd_irrV.csv")
-        
+        waterdisag.proc_irr_share(inputdirprep('irrigation-frac.csv'), tempdirprep("irrS.csv"))
+        waterdisag.proc_ag_area(outfiles[0], tempdirprep("irrA.csv"))
+        waterdisag.proc_ag_vol(outfiles[2], tempdirprep("withd_irrV.csv"))
+
         ## Run the disaggregation model 
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:
             arglist = ["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r",
-                       "run_downscaling('%s', '%s', '%s', '%s', '%s'" % (runoff_file, chflow_file, gcam_filestem, outputdir, scenariotag)]
-                       
+                       "run_downscaling('%s', '%s', '%s', '%s', '%s'" % (runoff_file, chflow_file, tempdir, outputdir, scenariotag)]
+
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT) 
             return sp.wait()
         
