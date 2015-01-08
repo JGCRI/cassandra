@@ -4,9 +4,8 @@ import re
 import subprocess
 import threading
 from sys import stdout
+import gcamutil
 from gcamutil import *
-
-## wrapper function that 
 
 ## Definitions for the modules for GCAM and associated downstream models
 
@@ -108,7 +107,7 @@ class GcamModuleBase(object):
             rv = self.runmod()
             if not rv==0:
                 ## possibly add some other error handling here.
-                raise RuntimeError("%s:  runmod returned error code %d" % (self.__class__, rv))
+                raise RuntimeError("%s:  runmod returned error code %s" % (self.__class__, str(rv)))
             else:
                 stdout.write("%s: finished successfully.\n"%(self.__class__))
 
@@ -175,7 +174,7 @@ class GlobalParamsModule(GcamModuleBase):
         self.complete = 1       # nothing to do, so we're always complete
         
     def runmod(self):
-        pass                    # nothing to do here.
+        return 0                # nothing to do here.
 
 ## class for the module that actually runs gcam
 ## params: 
@@ -282,16 +281,25 @@ class HydroModule(GcamModuleBase):
 
     def runmod(self):
         workdir  = self.params["workdir"]
+        inputdir = self.params["inputdir"] # input data from GCM
+        outputdir = self.params["outputdir"] # destination for output files
+        initstorage = self.params["init-storage-file"] # matlab data file containing initial storage
         gcm      = self.params["gcm"]
         scenario = self.params["scenario"]
+        runid    = self.params["runid"] # identifier for the GCM ensemble member
         logfile  = self.params["logfile"]
 
         os.chdir(workdir)
+
+        if inputdir[-1] != '/':
+            inputdir = inputdir + '/'
+        if outputdir[-1] != '/':
+            outputdir = outputdir + '/'
         
         ## we need to check existence of input and output files
-        prefile  = 'inputs/climatefut/data_' + gcm + '_' + scenario + '_pre.csv'
-        tempfile = 'inputs/climatefut/data_' + gcm + '_' + scenario + '_tmp.csv'
-        dtrfile  = 'inputs/climatefut/data_' + gcm + '_' + scenario + '_dtr.csv'
+        prefile  = inputdir + 'pr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        tempfile = inputdir + 'tas_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        dtrfile  = inputdir + 'dtr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
 
         print "input files:\n\t%s\n\t%s\n\t%s" % (prefile, tempfile, dtrfile)
     
@@ -303,26 +311,30 @@ class HydroModule(GcamModuleBase):
         if not os.path.exists(dtrfile):
             raise RuntimeError(msgpfx + "missing input file: " + dtrfile)
 
-        ## matlab files for future processing steps
-        qoutfile   = workdir + '/outputs/Avg_Runoff_235_' + gcm + '_' + scenario + '.mat'
-        flxoutfile = workdir + '/outputs/Avg_ChFlow_235_' + gcm + '_' + scenario + '.mat'
+        ## filename bases
+        qoutbase = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid
+        foutbase = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid
+        
+        ## matlab files for future processing steps 
+        qoutfile   = qoutbase + '.mat'
+        foutfile = foutbase + '.mat'
         ## c-data files for final output
-        cqfile   = workdir + '/outputs/cdata/runoff_' + gcm + '_' + scenario + '.dat'
-        cflxfile = workdir + '/outputs/cdata/chflow_' + gcm + '_' + scenario + '.dat'
+        cqfile   = qoutbase + '.dat'
+        cflxfile = foutbase + '.dat'
 
         ## Our result is the location of these output files.  Set that
         ## now, even though the files won't be created until we're
         ## done running.
         self.results['qoutfile']   = qoutfile
-        self.results['flxoutfile'] = flxoutfile
+        self.results['foutfile'] = foutfile
         self.results['cqfile']     = cqfile 
         self.results['cflxfile']   = cflxfile
 
-        print "output files\n\t%s\n\t%s\n\t%s\n\t%s\n" % (qoutfile, flxoutfile, cqfile, cflxfile)
+        print "output files\n\t%s\n\t%s\n\t%s\n\t%s\n" % (qoutfile, foutfile, cqfile, cflxfile)
         
         if not self.clobber: 
             allfiles = 1
-            for file in [qoutfile, flxoutfile, cqfile, cflxfile]:
+            for file in [qoutfile, foutfile, cqfile, cflxfile]:
                 if not os.path.exists(file):
                     allfiles = 0
                     break
@@ -339,7 +351,8 @@ class HydroModule(GcamModuleBase):
         ##       error code.  Yuck.
         print 'Running the matlab hydrology code'
         with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
-            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r', "run_future_hydro('%s','%s');exit" % (gcm, scenario)]
+            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
+                       "run_future_hydro('%s','%s','%s','%s', '%s','%s', '%s', '%s');exit" % (prefile,tempfile,dtrfile,initstorage, qoutfile,foutfile, cqfile,cflxfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
         return sp.wait()
     ## end of runmod()
@@ -371,7 +384,7 @@ class WaterDisaggregationModule(GcamModuleBase):
         gcam_rslts  = self.cap_tbl["gcam-water"].fetch() # gcam water outputs module
 
         runoff_file   = hydro_rslts["qoutfile"]
-        chflow_file   = hydro_rslts["flxoutfile"]
+        chflow_file   = hydro_rslts["foutfile"]
         dbxmlfile     = gcam_rslts["dbxml"]
         workdir       = self.params["workdir"]
         outputdir     = self.params["outputdir"]
