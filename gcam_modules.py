@@ -170,12 +170,18 @@ class GlobalParamsModule(GcamModuleBase):
     def __init__(self, cap_tbl):
         super(GlobalParamsModule, self).__init__(cap_tbl)
         self.results = self.params # this is a reference copy, so any entries in params will also appear in results
+        print self.results
         cap_tbl["general"] = self
+
+        ## We need to allow gcamutil access to thiese parameters, since it doesn't otherwise know how to find the
+        ## global params module.  
+        gcamutil.genparams = self.params
         self.complete = 1       # nothing to do, so we're always complete
         
     def runmod(self):
         return 0                # nothing to do here.
 
+    
 ## class for the module that actually runs gcam
 ## params: 
 ##   exe        = full path to gcam.exe
@@ -194,6 +200,11 @@ class GcamModule(GcamModuleBase):
         exe    = self.params["exe"]
         cfg    = self.params["config"]
         logcfg = self.params["logconfig"]
+        try:
+            logfile = self.params['logfile'] # file for redirecting gcam's copious stdout
+        except KeyError:
+            ## logfile is optional
+            logfile = None
 
         ## usually the exe, cfg, and logcfg files will be in the same
         ## directory, but in case of difference, take the location of
@@ -255,14 +266,19 @@ class GcamModule(GcamModuleBase):
         ## now we're ready to actually do the run.  We don't check the return code; we let the run() method do that.
         os.chdir(self.workdir)
         print "Running:  %s -C%s -L%s" % (exe, cfg, logcfg)
-        
-        return subprocess.call([exe, '-C'+cfg, '-L'+logcfg])
+
+        if logfile is None:
+            return subprocess.call([exe, '-C'+cfg, '-L'+logcfg])
+        else:
+            with open(logfile,"w") as lf:
+                return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf)
 
 ## class for the hydrology code
 ## params:
 ##   workdir - working directory
 ##       gcm - GCM outputs to use
-##  scenario - tag indicating the scenario (used for naming the output files)
+##  scenario - tag indicating the scenario to use.
+##     runid - tag indicating which ensemble member to use.
 ##   logfile - file to direct the matlab code's output to    
 ##
 ## results: 
@@ -277,7 +293,6 @@ class HydroModule(GcamModuleBase):
     def __init__(self, cap_tbl):
         super(HydroModule, self).__init__(cap_tbl)
         cap_tbl["gcam-hydro"] = self
-        gcamutil.genparams = self.params
 
     def runmod(self):
         workdir  = self.params["workdir"]
@@ -314,21 +329,29 @@ class HydroModule(GcamModuleBase):
         ## filename bases
         qoutbase = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid
         foutbase = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid
+        boutbase = outputdir + 'basin_runoff_235_' + gcm + '_' + scenario + '_' + runid
         
         ## matlab files for future processing steps 
         qoutfile   = qoutbase + '.mat'
-        foutfile = foutbase + '.mat'
+        foutfile   = foutbase + '.mat'
+        basinqfile = boutbase + '.mat'
         ## c-data files for final output
-        cqfile   = qoutbase + '.dat'
-        cflxfile = foutbase + '.dat'
+        cqfile     = qoutbase + '.dat'
+        cflxfile   = foutbase + '.dat'
+        cbasinqfile = boutbase + '.dat'
 
         ## Our result is the location of these output files.  Set that
         ## now, even though the files won't be created until we're
         ## done running.
         self.results['qoutfile']   = qoutfile
-        self.results['foutfile'] = foutfile
+        self.results['foutfile']   = foutfile
         self.results['cqfile']     = cqfile 
         self.results['cflxfile']   = cflxfile
+        self.results['basinqfile'] = basinqfile
+        self.results['cbasinqfile'] = cbasinqfile
+        ## We need to report the runid so that other modules that use
+        ## this output can name their files correctly.
+        self.results['runid']      = runid
 
         print "output files\n\t%s\n\t%s\n\t%s\n\t%s\n" % (qoutfile, foutfile, cqfile, cflxfile)
         
@@ -344,6 +367,8 @@ class HydroModule(GcamModuleBase):
                 self.results["changed"] = 0 # mark cached results as clean
                 return 0        # success code
 
+        print "basinqfile: %s" % basinqfile
+            
         ## Run the matlab code.
         ## TODO: eventually we need to move away from matlab, as it is not a
         ##       suitable batch language.  Notably, if it encounters an error
@@ -352,7 +377,8 @@ class HydroModule(GcamModuleBase):
         print 'Running the matlab hydrology code'
         with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_future_hydro('%s','%s','%s','%s', '%s','%s', '%s', '%s');exit" % (prefile,tempfile,dtrfile,initstorage, qoutfile,foutfile, cqfile,cflxfile)]
+                       "run_future_hydro('%s','%s','%s','%s', '%s','%s', '%s','%s','%s','%s');exit" %
+                       (prefile,tempfile,dtrfile,initstorage, qoutfile,foutfile, cqfile,cflxfile,basinqfile,cbasinqfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
         return sp.wait()
     ## end of runmod()
@@ -361,6 +387,7 @@ class HydroModule(GcamModuleBase):
 ## params
 ##    workdir  - working directory
 ##  outputdir  - directory for outputs
+##   inputdir  - directory for static inputs
 ##   scenario  - scenario tag
 ##
 ## results:  c-style binary files for each of the following variables
@@ -370,8 +397,8 @@ class HydroModule(GcamModuleBase):
 ### This is how you run the disaggregation code
 ### matlab -nodisplay -nosplash -nodesktop -r "run_disaggregation('<runoff-file>', '<chflow-file>', '<gcam-filestem>');exit" >& <logfile> < /dev/null
 class WaterDisaggregationModule(GcamModuleBase):
-    def __init__(self, depends):
-        super(WaterDisaggregationModule, self, cap_tbl).__init__(cap_tbl)
+    def __init__(self, cap_tbl):
+        super(WaterDisaggregationModule, self).__init__(cap_tbl)
         cap_tbl["water-disaggregation"] = self
 
     def runmod(self):
@@ -381,16 +408,18 @@ class WaterDisaggregationModule(GcamModuleBase):
         os.chdir(workdir)
 
         hydro_rslts = self.cap_tbl["gcam-hydro"].fetch() # hydrology module
-        gcam_rslts  = self.cap_tbl["gcam-water"].fetch() # gcam water outputs module
+        gcam_rslts  = self.cap_tbl["gcam-core"].fetch() # gcam core module
 
         runoff_file   = hydro_rslts["qoutfile"]
         chflow_file   = hydro_rslts["foutfile"]
+        basinqfile    = hydro_rslts["basinqfile"]
+        runid         = hydro_rslts["runid"]
         dbxmlfile     = gcam_rslts["dbxml"]
-        workdir       = self.params["workdir"]
+        #dbxmlfile     = "/lustre/data/rpl/gcam-water/SSP_Scen0.dbxml"
         outputdir     = self.params["outputdir"]
+        tempdir       = self.params["tempdir"]  # location for intermediate files produced by dbxml queries
         inputdir      = self.params["inputdir"] # static inputs, such as irrigation share and query files.
         scenariotag   = self.params["scenario"]
-        tempdir       = outputdir # location of intermediate files.  Consider making separate from the output dir
 
         vars = ["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi"]
         allfiles = 1
@@ -415,6 +444,7 @@ class WaterDisaggregationModule(GcamModuleBase):
 
         inputdirprep  = get_dir_prepender(inputdir)
         tempdirprep = get_dir_prepender(tempdir)
+        outdirprep  = get_dir_prepender(outputdir)
             
         queryfiles = ['batch-land-alloc.xml', 'batch-population.xml', 'batch-water-ag.xml',
                       'batch-water-dom.xml', 'batch-water-elec.xml', 'batch-water-livestock.xml',
@@ -425,7 +455,7 @@ class WaterDisaggregationModule(GcamModuleBase):
         queryfiles = map(inputdirprep, queryfiles)
         outfiles = map(tempdirprep, outfiles)
         gcamutil.gcam_query(queryfiles, dbxmlfile, outfiles)
-        
+
         ### reformat the GCAM outputs into the files the matlab code needs 
         ### note all the csv files referred to here are temporary
         ### files.  On the input side the names need to match the ones
@@ -442,7 +472,7 @@ class WaterDisaggregationModule(GcamModuleBase):
         wdnonag = waterdisag.proc_wdnonag_total(tempdirprep("withd_nonAg.csv"), wddom, wdelec, wdman, wdmin)
 
         ## population data
-        waterdisag.proc_pop(outfiles[1], tempdirprep("pop_fac.csv"), tempdirprep("pop_tot.csv"))
+        waterdisag.proc_pop(outfiles[1], tempdirprep("pop_fac.csv"), tempdirprep("pop_tot.csv"), outdirprep("pop_demo.csv"))
 
         ## livestock demands
         wdliv  = waterdisag.proc_wdlivestock(outfiles[5], tempdirprep("withd_liv.csv"))
@@ -452,13 +482,30 @@ class WaterDisaggregationModule(GcamModuleBase):
         waterdisag.proc_ag_area(outfiles[0], tempdirprep("irrA.csv"))
         waterdisag.proc_ag_vol(outfiles[2], tempdirprep("withd_irrV.csv"))
 
-        ## Run the disaggregation model 
+        ## Run the disaggregation model
+        matlabfn = "run_disaggregation('%s','%s','%s', '%s','%s', '%s', '%s')" % (runoff_file, chflow_file,basinqfile,  tempdir, outputdir, scenariotag,runid)
+        print 'current dir: %s ' % os.getcwd()
+        print 'matlab fn:  %s' % matlabfn
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:
-            arglist = ["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r",
-                       "run_downscaling('%s', '%s', '%s', '%s', '%s'" % (runoff_file, chflow_file, tempdir, outputdir, scenariotag)]
+            arglist = ["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r", matlabfn]
 
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT) 
             return sp.wait()
         
     ## end of runmod
         
+# ## class for the netcdf-demo builder
+# ## params:
+# ##   bindir  - location of the netcdf converter
+# ##     dsid  - dataset id
+# ##  forcing  - forcing value (written into the output data as metadata)
+# ## globalpop - 2050 global population (written into output data as metadata)
+# ##    pcGDP  - 2050 per-capita GDP (written into output data as metadata -- currently not used anyhow)
+# ## outputdir - output directory
+# class NetcdfDemoModule(GcamModuleBase):
+#     def __init__(self, depends):
+#         super(NetcdfDemoModule, self, cap_tbl).__init__(cap_tbl)
+#         cap_tbl['netcdf-demo'] = self
+
+#     def runmod(self):
+#         hydro_rslts = self.cap_tbl['gcam-hydro']

@@ -8,10 +8,16 @@ regions_ordered = ["USA", "Canada", "Western Europe", "Japan", "Australia_NZ",
                    "Latin America", "Southeast Asia", "Eastern Europe",
                    "Korea", "India"]
 
+## For some reason I gave out a different order for the demo data
+regions_demo = ['Africa', 'Australia_NZ', 'Canada', 'China', 'Eastern Europe',
+                'Former Soviet Union', 'India', 'Japan', 'Korea', 'Latin America',
+                'Middle East', 'Southeast Asia', 'USA', 'Western Europe',]
+
 ## Year-2000 population benchmarks
 gis2000 = {"Africa" : 813123731,
            "Australia_NZ" : 22603983,
            "Canada" : 31209299,
+           "China"  : 1397857019 ,
            "Eastern Europe" : 123917239,
            "Former Soviet Union" : 297536224,
            "India" : 1010329677,
@@ -52,9 +58,9 @@ def rd_gcam_table(filename, njunk=0):
 
             
 ## reorder the table output and write it to a file.  
-def table_output_ordered(filename, table, incl_region=False):
+def table_output_ordered(filename, table, incl_region=False, ordering=regions_ordered):
     with open(filename,"w") as file:
-        for region in regions_ordered:
+        for region in ordering:
             if incl_region:
                 file.write("%s,%s\n" % (region, table[region]))
             else:
@@ -82,7 +88,7 @@ def proc_wdnonag_total(outfile, wddom, wdelec, wdmanuf, wdmining):
     table_output_ordered(outfile, wdnonag)
     return wdnonag 
     
-def proc_pop(infile, outfile_fac, outfile_tot): 
+def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo): 
     poptbl = rd_gcam_table(infile,1)
     pop_fac = {}
     pop_tot = {}
@@ -98,6 +104,7 @@ def proc_pop(infile, outfile_fac, outfile_tot):
 
     table_output_ordered(outfile_fac, pop_fac)
     table_output_ordered(outfile_tot, pop_tot)
+    table_output_ordered(outfile_demo, pop_tot, ordering=regions_demo)
 
     return (pop_fac, pop_tot)
 
@@ -300,7 +307,7 @@ def proc_ag_area(infilename, outfilename):
 
             for line in infile:
                 line = gcamutil.rm_trailing_comma(gcamutil.scenariofix(line))
-                print line
+                #print line
                 fields = line.split(',')
                 rgntxt = fields[1]
                 latxt  = fields[2]
@@ -324,7 +331,7 @@ def proc_ag_area(infilename, outfilename):
                 data.insert(0,aezno)
                 data.insert(0,rgnno)
 
-                print data
+                #print data
                 ## data go out in the same order they came in; we
                 ## don't sort by region.
                 outfile.write(','.join(map(str,data)))

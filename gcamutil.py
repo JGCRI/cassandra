@@ -6,8 +6,10 @@ import tempfile
 ## utility functions used in other gcam python code
 
 ## Place holder for the general params structure.  The constructor for
-## that structure knows it's supposed to add itself here.
+## that structure knows it's supposed to add itself here.  (This is
+## kind of ugly.  Maybe we should think up a better way to do it.)
 genparams = None
+    
 
 ## Often we will have to parse values from a config file that are
 ## meant to indicate a boolean value.  We list here the strings that
@@ -120,7 +122,7 @@ def rewrite_query(query, dbxml, outfile):
 
     dbxmlstr = '<xmldbLocation>' + dbxml + '</xmldbLocation>'
     outfilestr = '<outFile>' + outfile + '</outFile>'
-    
+
     for line in origquery:
         line = xmldbloc.sub(dbxmlstr, line)
         line = outfileloc.sub(outfilestr, line)
