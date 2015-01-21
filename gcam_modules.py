@@ -3,6 +3,7 @@ import os.path
 import re
 import subprocess
 import threading
+import tempfile
 from sys import stdout
 import gcamutil
 from gcamutil import *
@@ -421,20 +422,6 @@ class WaterDisaggregationModule(GcamModuleBase):
         inputdir      = self.params["inputdir"] # static inputs, such as irrigation share and query files.
         scenariotag   = self.params["scenario"]
 
-        vars = ["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi"]
-        allfiles = 1
-        for var in vars:
-            filename = "%s/%s-%s.dat" % (outputdir, var, scenariotag)
-            self.results[var] = filename
-            if not os.path.exists(filename):
-                allfiles = 0
-                break
-
-        if allfiles and not clobber and not (gcam_rslts["changed"] or hydro_rslts["changed"]):
-            print "WaterDisaggregationModule: results exist and no clobber.  Skipping."
-            self.results["changed"] = 0
-            return 0
-
         ## Helper function generator
         def get_dir_prepender(dir):
             if dir[-1]=='/':
@@ -444,7 +431,28 @@ class WaterDisaggregationModule(GcamModuleBase):
 
         inputdirprep  = get_dir_prepender(inputdir)
         tempdirprep = get_dir_prepender(tempdir)
-        outdirprep  = get_dir_prepender(outputdir)
+        outdirprep  = get_dir_prepender(outputdir) 
+        
+        vars = ["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi",
+                "basin-wdtot", "basin-wddom", "basin-wdelec", "basin-wdirr", "basin-wdliv", "basin-wdmfg", "basin-wdmin", "basin-wsi"]
+        allfiles = 1
+        for var in vars:
+            filename = "%s/%s-%s-%s.dat" % (outputdir, var, scenariotag, runid)
+            self.results[var] = filename
+            if not os.path.exists(filename):
+                print 'File %s does not exist.  Running WaterDisaggregationModule.\n' % filename
+                allfiles = 0
+                break
+
+        
+        pop_demo_file = outdirprep("pop_demo.csv")
+        self.results['pop-demo'] = pop_demo_file
+
+        if allfiles and not self.clobber and not (gcam_rslts["changed"] or hydro_rslts["changed"]):
+            print "WaterDisaggregationModule: results exist and no clobber.  Skipping."
+            self.results["changed"] = 0
+            return 0
+
             
         queryfiles = ['batch-land-alloc.xml', 'batch-population.xml', 'batch-water-ag.xml',
                       'batch-water-dom.xml', 'batch-water-elec.xml', 'batch-water-livestock.xml',
@@ -472,7 +480,7 @@ class WaterDisaggregationModule(GcamModuleBase):
         wdnonag = waterdisag.proc_wdnonag_total(tempdirprep("withd_nonAg.csv"), wddom, wdelec, wdman, wdmin)
 
         ## population data
-        waterdisag.proc_pop(outfiles[1], tempdirprep("pop_fac.csv"), tempdirprep("pop_tot.csv"), outdirprep("pop_demo.csv"))
+        waterdisag.proc_pop(outfiles[1], tempdirprep("pop_fac.csv"), tempdirprep("pop_tot.csv"), pop_demo_file)
 
         ## livestock demands
         wdliv  = waterdisag.proc_wdlivestock(outfiles[5], tempdirprep("withd_liv.csv"))
@@ -494,25 +502,51 @@ class WaterDisaggregationModule(GcamModuleBase):
         
     ## end of runmod
         
-# ## class for the netcdf-demo builder
-# ## params:
-# ##   bindir  - location of the netcdf converter
-# ##     dsid  - dataset id
-# ##  forcing  - forcing value (written into the output data as metadata)
-# ## globalpop - 2050 global population (written into output data as metadata)
-# ##    pcGDP  - 2050 per-capita GDP (written into output data as metadata -- currently not used anyhow)
-# ## outputdir - output directory
-# class NetcdfDemoModule(GcamModuleBase):
-#     def __init__(self, depends):
-#         super(NetcdfDemoModule, self, cap_tbl).__init__(cap_tbl)
-#         cap_tbl['netcdf-demo'] = self
+## class for the netcdf-demo builder
+## params:
+##   mat2nc  - location of the netcdf converter executable
+##     dsid  - dataset id
+##  forcing  - forcing value (written into the output data as metadata)
+## globalpop - 2050 global population (written into output data as metadata)
+##    pcGDP  - 2050 per-capita GDP (written into output data as metadata -- currently not used anyhow)
+## outputdir - output directory
+class NetcdfDemoModule(GcamModuleBase):
+    def __init__(self, cap_tbl):
+        super(NetcdfDemoModule, self).__init__(cap_tbl)
+        cap_tbl['netcdf-demo'] = self
 
-#     def runmod(self):
-#         hydro_rslts = self.cap_tbl['gcam-hydro'].fetch()
-#         water_rslts = self.cap_tbl['water-disaggregation'].fetch()
+    def runmod(self):
+        hydro_rslts = self.cap_tbl['gcam-hydro'].fetch()
+        water_rslts = self.cap_tbl['water-disaggregation'].fetch()
 
-#         chflow_file  = hydro_rslts['cflxfile']
-#         basin_runoff = hydro_rslts['cbasinqfile']
-#         scenariotag  = self.params['scenario'] # XXX should probably make this a global param.
+        chflow_file  = hydro_rslts['cflxfile']
+        basin_runoff = hydro_rslts['cbasinqfile']
 
-#         vars = ["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi"]
+        rcp = self.params['rcp']
+        pop = self.params['pop']
+        gdp = self.params['gdp']
+        outfile = self.params['outfile']
+        mat2nc  = self.params['mat2nc']
+        
+        self.results['outfile'] = outfile
+        
+        try:
+            ## create a temporary file to hold the config
+            (fd, tempfilename) = tempfile.mkstemp()
+            cfgfile = os.fdopen(fd,"w")
+
+            cfgfile.write('%s\n%s\n%s\n' % (rcp, pop, gdp))
+            cfgfile.write('%s\n' % outfile)
+            cfgfile.write('%s\n' % chflow_file)
+            for var in ['wdirr', 'wdliv', 'wdelec', 'wdmfg', 'wdtotal', 'wddom', 'wsi']:
+                cfgfile.write('%s\n' % water_rslts[var])
+            cfgfile.write('%s\n' % water_rslts['pop-demo'])
+            cfgfile.write('%s\n' % basin_runoff)
+            for var in ['basin-wdirr', 'basin-wdliv', 'basin-wdelec', 'basin-wdmfg', 'basin-wdtot', 'basin-wddom', 'basin-wsi']:
+                cfgfile.write('%s\n' % water_rslts[var])
+
+            cfgfile.close()
+
+            return subprocess.call([mat2nc, tempfilename])
+        finally:
+            os.unlink(tempfilename)
