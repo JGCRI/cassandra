@@ -256,6 +256,7 @@ biomasslist = ["eucalyptus", "Jatropha", "miscanthus", "willow", "biomassOil"]
 def proc_irr_share(infilename, outfile):
     ## initialize table with zeros.  Any combination not contained in
     ## the table will default to 0.
+    print 'irr share infile: %s' % infilename
     irr_share = {}
     for region in regions_ordered:
         for crop in croplist:
@@ -272,11 +273,11 @@ def proc_irr_share(infilename, outfile):
         infile.readline()
 
         for line in infile:
-            line   = gcamutil.rm_trailing_comma(line)
+            line   = gcamutil.rm_trailing_comma(gcamutil.chomp(line))
             fields = line.split(',')
             crop   = fields.pop()
             region = fields.pop()
-            aez    = fields[1] 
+            aez    = int(fields[1])
 
             irr_share[(region,crop,aez)] = fields # includes region, aez, crop at the beginning
                                                   # these columns are expected by the matlab code
@@ -289,6 +290,7 @@ def proc_irr_share(infilename, outfile):
             for aez in range(1,19):
                 for crop in croplist:
                     outfile.write(','.join(map(lambda x: str(x), irr_share[(region,crop,aez)])))
+                    outfile.write('\n')
             
 ## end of irrigation share reader
 

@@ -2,6 +2,7 @@ import os
 import re
 import subprocess
 import tempfile
+import random
 
 ## utility functions used in other gcam python code
 
@@ -71,9 +72,16 @@ def gcam_query(queryfiles, dbxmlfiles, outfiles):
     ModelInterface = genparams["ModelInterface"]
     DBXMLlib       = genparams["DBXMLlib"]
         
-    ## start up the virtual frame buffer.  The Model Interface needs
-    ## this even though it won't be displaying anything.
-    xvfb = subprocess.Popen(['Xvfb', ':1', '-pn', '-audit', '4', '-screen', '0', '800x600x16'])
+    ### start up the virtual frame buffer.  The Model Interface needs
+    ### this even though it won't be displaying anything.
+    
+    ## We need to select a random display number to avoid collisions
+    ## if we're running several driver instances concurrently.
+    ## Display numbers up to 1024 seem to be safe.
+    random.jumpahead(os.getpid()) # make sure that different instances have different rng states.
+    disp = random.randint(1,1024)
+    print 'X display is: %d' % disp
+    xvfb = subprocess.Popen(['Xvfb', ':%d'%disp, '-pn', '-audit', '4', '-screen', '0', '800x600x16'])
     try:
         ldlibpath = os.getenv('LD_LIBRARY_PATH')
         if ldlibpath is None:
@@ -87,7 +95,7 @@ def gcam_query(queryfiles, dbxmlfiles, outfiles):
             tempquery = None
             try:
                 tempquery = rewrite_query(query, dbxml, output)
-                execlist = ['/bin/env', 'DISPLAY=:1.0', ldlibpath, 'java', '-jar',
+                execlist = ['/bin/env', 'DISPLAY=:%d.0'%disp, ldlibpath, 'java', '-jar',
                             ModelInterface, '-b', tempquery]
 
                 subprocess.call(execlist)
@@ -136,3 +144,15 @@ def rewrite_query(query, dbxml, outfile):
 trlcomma = re.compile(r',\s*$')
 def rm_trailing_comma(line):
     return trlcomma.sub('',line)
+
+## remove trailing newline
+def chomp(string):
+    ## search for last non-newline
+    i = -1
+    while string[i] == '\n':
+        i -= 1
+    i += 1                      # forward to the first newline
+    if i<0:
+        return string[:i]
+    else:
+        return string

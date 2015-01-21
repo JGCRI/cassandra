@@ -424,7 +424,7 @@ class WaterDisaggregationModule(GcamModuleBase):
         vars = ["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi"]
         allfiles = 1
         for var in vars:
-            filename = "%s/%s-%s.dat" % (tempdir, var, scenariotag)
+            filename = "%s/%s-%s.dat" % (outputdir, var, scenariotag)
             self.results[var] = filename
             if not os.path.exists(filename):
                 allfiles = 0
@@ -483,7 +483,7 @@ class WaterDisaggregationModule(GcamModuleBase):
         waterdisag.proc_ag_vol(outfiles[2], tempdirprep("withd_irrV.csv"))
 
         ## Run the disaggregation model
-        matlabfn = "run_disaggregation('%s','%s','%s', '%s','%s', '%s', '%s')" % (runoff_file, chflow_file,basinqfile,  tempdir, outputdir, scenariotag,runid)
+        matlabfn = "run_disaggregation('%s','%s','%s', '%s','%s', '%s', '%s');" % (runoff_file, chflow_file,basinqfile,  tempdir, outputdir, scenariotag,runid)
         print 'current dir: %s ' % os.getcwd()
         print 'matlab fn:  %s' % matlabfn
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:
@@ -508,4 +508,11 @@ class WaterDisaggregationModule(GcamModuleBase):
 #         cap_tbl['netcdf-demo'] = self
 
 #     def runmod(self):
-#         hydro_rslts = self.cap_tbl['gcam-hydro']
+#         hydro_rslts = self.cap_tbl['gcam-hydro'].fetch()
+#         water_rslts = self.cap_tbl['water-disaggregation'].fetch()
+
+#         chflow_file  = hydro_rslts['cflxfile']
+#         basin_runoff = hydro_rslts['cbasinqfile']
+#         scenariotag  = self.params['scenario'] # XXX should probably make this a global param.
+
+#         vars = ["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi"]
