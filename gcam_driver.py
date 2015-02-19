@@ -93,6 +93,18 @@ if __name__ == "__main__":
     ## Wait for all threads to complete before printing end message.
     for thread in threads:
         thread.join()
+
+    ## Check to see if any of the modules failed
+    fail = 0
+    for module in modlist:
+        if module.status != 1:
+            print 'Module %s returned failure status\n' % str(module.__class__)
+            fail += 1
+
+    if fail == 0:
+        print '\n****************All modules completed successfully.'
+    else:
+        print '\n****************%d modules failed.' % fail
         
-    print "FIN."
+    print "\nFIN."
     

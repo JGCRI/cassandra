@@ -5,11 +5,11 @@ import subprocess
 import threading
 import tempfile
 from sys import stdout
+from sys import stderr
 import gcamutil
 from gcamutil import *
 
-## Definitions for the modules for GCAM and associated downstream models
-
+##### Definitions for the modules for GCAM and associated downstream models
 
 #### A common base class for all of the modules.  We can put any
 #### utility functions that are common to all modules here, but its
@@ -82,7 +82,7 @@ from gcamutil import *
 
 class GcamModuleBase(object):
     def __init__(self, cap_tbl):
-        self.complete = 0
+        self.status = 0         # status indicator: 0- not yet run, 1- complete, 2- error
         self.results = {}
         self.params  = {}
         self.results["changed"] = 1
@@ -102,34 +102,41 @@ class GcamModuleBase(object):
     ## error, we don't set the complete variable or notify waiting
     ## threads.  This will cause a deadlock.  We should handle this
     ## more gracefully.  This function should only ever be called from
-    ## the run() method above.
+    ## the run() method above.  <- XXX this problem should be fixed
+    ## now, but we haven't tested the fix.
     def runmod_wrapper(self):
         with self.condition:
-            rv = self.runmod()
-            if not rv==0:
-                ## possibly add some other error handling here.
-                raise RuntimeError("%s:  runmod returned error code %s" % (self.__class__, str(rv)))
-            else:
-                stdout.write("%s: finished successfully.\n"%(self.__class__))
+            try:
+                rv = self.runmod()
+                if not rv==0:
+                    ## possibly add some other error handling here.
+                    raise RuntimeError("%s:  runmod returned error code %s" % (self.__class__, str(rv)))
+                else:
+                    stdout.write("%s: finished successfully.\n"%(self.__class__))
 
-            self.complete = 1
-            self.condition.notify_all()
+                self.status = 1                  # set success condition
+            except:
+                self.status = 2                  # set error condition
+                raise
+            finally:
+                self.condition.notify_all()      # release any waiting threads
         ## end of with block:  lock on condition var released.
         
     def fetch(self):
         ## get the results of the calculation.  These aren't returned
         ## from run() because it will run asynchronously.  This method
         ## waits if necessary and returns the results.
-        with self.condition:
-            if not self.complete:
+        with self.condition: 
+            if self.status == 0:                  # module hasn't run yet.  Wait on it
                 print "\twaiting on %s\n" % self.__class__
                 self.condition.wait()
-                if not self.complete:
-                    ## once we've waited, the complete flag should be
-                    ## set.  If it isn't, then something has gone
-                    ## horribly wrong.
-                    raise RuntimeError("%s: wait() returned with complete not set!"%self.__class__)
-        ## end of with block:  lock is released 
+        ## end of with block:  lock is released
+
+        ## By this point, the module should have run.  If status is not success, then
+        ## there has been an error.
+        if self.status != 1:
+            raise RuntimeError("%s: wait() returned with non-success status!"%self.__class__)
+
         return self.results
 
     def finalize_parsing(self):
@@ -331,15 +338,18 @@ class HydroModule(GcamModuleBase):
         qoutbase = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid
         foutbase = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid
         boutbase = outputdir + 'basin_runoff_235_' + gcm + '_' + scenario + '_' + runid
+        routbase = outputdir + 'rgn_runoff_235_'+gcm+'_' + scenario + '_' + runid
         
         ## matlab files for future processing steps 
         qoutfile   = qoutbase + '.mat'
         foutfile   = foutbase + '.mat'
         basinqfile = boutbase + '.mat'
+        rgnqfile   = routbase + '.mat'
         ## c-data files for final output
         cqfile     = qoutbase + '.dat'
         cflxfile   = foutbase + '.dat'
         cbasinqfile = boutbase + '.dat'
+        crgnqfile  = routbase + '.dat'
 
         ## Our result is the location of these output files.  Set that
         ## now, even though the files won't be created until we're
@@ -350,15 +360,15 @@ class HydroModule(GcamModuleBase):
         self.results['cflxfile']   = cflxfile
         self.results['basinqfile'] = basinqfile
         self.results['cbasinqfile'] = cbasinqfile
+        self.results['rgnqfile']   = rgnqfile
+        self.results['crgnqfile']  = crgnqfile
         ## We need to report the runid so that other modules that use
         ## this output can name their files correctly.
         self.results['runid']      = runid
 
-        print "output files\n\t%s\n\t%s\n\t%s\n\t%s\n" % (qoutfile, foutfile, cqfile, cflxfile)
-        
         if not self.clobber: 
             allfiles = 1
-            for file in [qoutfile, foutfile, cqfile, cflxfile]:
+            for file in [qoutfile, foutfile, cqfile, cflxfile, basinqfile, cbasinqfile, rgnqfile, crgnqfile]:
                 if not os.path.exists(file):
                     allfiles = 0
                     break
@@ -368,8 +378,6 @@ class HydroModule(GcamModuleBase):
                 self.results["changed"] = 0 # mark cached results as clean
                 return 0        # success code
 
-        print "basinqfile: %s" % basinqfile
-            
         ## Run the matlab code.
         ## TODO: eventually we need to move away from matlab, as it is not a
         ##       suitable batch language.  Notably, if it encounters an error
@@ -378,8 +386,8 @@ class HydroModule(GcamModuleBase):
         print 'Running the matlab hydrology code'
         with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_future_hydro('%s','%s','%s','%s', '%s','%s', '%s','%s','%s','%s');exit" %
-                       (prefile,tempfile,dtrfile,initstorage, qoutfile,foutfile, cqfile,cflxfile,basinqfile,cbasinqfile)]
+                       "run_future_hydro('%s','%s','%s','%s', '%s','%s', '%s','%s','%s','%s', '%s', '%s');exit" %
+                       (prefile,tempfile,dtrfile,initstorage, qoutfile,foutfile, cqfile,cflxfile,basinqfile,cbasinqfile, rgnqfile,crgnqfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
         return sp.wait()
     ## end of runmod()
@@ -414,6 +422,7 @@ class WaterDisaggregationModule(GcamModuleBase):
         runoff_file   = hydro_rslts["qoutfile"]
         chflow_file   = hydro_rslts["foutfile"]
         basinqfile    = hydro_rslts["basinqfile"]
+        rgnqfile      = hydro_rslts["rgnqfile"]
         runid         = hydro_rslts["runid"]
         dbxmlfile     = gcam_rslts["dbxml"]
         #dbxmlfile     = "/lustre/data/rpl/gcam-water/SSP_Scen0.dbxml"
@@ -421,6 +430,25 @@ class WaterDisaggregationModule(GcamModuleBase):
         tempdir       = self.params["tempdir"]  # location for intermediate files produced by dbxml queries
         inputdir      = self.params["inputdir"] # static inputs, such as irrigation share and query files.
         scenariotag   = self.params["scenario"]
+        ## Parse the water transfer parameters.
+        if self.params.has_key('water-transfer'):
+            transfer      = gcamutil.parseTFstring(self.params['water-transfer'])
+            try:
+                transfer_file = self.params['transfer-file']
+            except KeyError:
+                stderr.write('Water transfer set, but no transfer data file specified.\n')
+                return 5
+        else:
+            transfer = False
+            transfer_file = '/dev/null' # won't be used by the matlab program, but we still need a placeholder
+
+        self.results['water-transfer'] = transfer
+        ## append the transfer status to the scenario tag
+        if transfer:
+            scenariotag = scenariotag + 'wT'
+        else:
+            scenariotag = scenariotag + 'wF' 
+        print 'scenariotag = %s' % scenariotag
 
         ## Helper function generator
         def get_dir_prepender(dir):
@@ -434,7 +462,8 @@ class WaterDisaggregationModule(GcamModuleBase):
         outdirprep  = get_dir_prepender(outputdir) 
         
         vars = ["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi",
-                "basin-wdtot", "basin-wddom", "basin-wdelec", "basin-wdirr", "basin-wdliv", "basin-wdmfg", "basin-wdmin", "basin-wsi"]
+                "basin-supply", "basin-wdtot", "basin-wddom", "basin-wdelec", "basin-wdirr", "basin-wdliv", "basin-wdmfg", "basin-wdmin", "basin-wsi",
+                "rgn-supply", "rgn-wdtot", "rgn-wddom", "rgn-wdelec", "rgn-wdirr", "rgn-wdliv", "rgn-wdmfg", "rgn-wdmin", "rgn-wsi"]
         allfiles = 1
         for var in vars:
             filename = "%s/%s-%s-%s.dat" % (outputdir, var, scenariotag, runid)
@@ -442,10 +471,9 @@ class WaterDisaggregationModule(GcamModuleBase):
             if not os.path.exists(filename):
                 print 'File %s does not exist.  Running WaterDisaggregationModule.\n' % filename
                 allfiles = 0
-                break
 
         
-        pop_demo_file = outdirprep("pop_demo.csv")
+        pop_demo_file = outdirprep("pop-demo.csv") # changed this to use the same region ordering in the water data.
         self.results['pop-demo'] = pop_demo_file
 
         if allfiles and not self.clobber and not (gcam_rslts["changed"] or hydro_rslts["changed"]):
@@ -453,7 +481,9 @@ class WaterDisaggregationModule(GcamModuleBase):
             self.results["changed"] = 0
             return 0
 
-            
+
+        print 'disaggregation results:\n%s' % str(self.results)
+        
         queryfiles = ['batch-land-alloc.xml', 'batch-population.xml', 'batch-water-ag.xml',
                       'batch-water-dom.xml', 'batch-water-elec.xml', 'batch-water-livestock.xml',
                       'batch-water-mfg.xml', 'batch-water-mining.xml']
@@ -483,7 +513,7 @@ class WaterDisaggregationModule(GcamModuleBase):
         waterdisag.proc_pop(outfiles[1], tempdirprep("pop_fac.csv"), tempdirprep("pop_tot.csv"), pop_demo_file)
 
         ## livestock demands
-        wdliv  = waterdisag.proc_wdlivestock(outfiles[5], tempdirprep("withd_liv.csv"))
+        wdliv  = waterdisag.proc_wdlivestock(outfiles[5], tempdirprep("withd_liv.csv"), tempdirprep('rgn_tot_withd_liv.csv'))
 
         ## agricultural demands and auxiliary quantities
         waterdisag.proc_irr_share(inputdirprep('irrigation-frac.csv'), tempdirprep("irrS.csv"))
@@ -491,7 +521,11 @@ class WaterDisaggregationModule(GcamModuleBase):
         waterdisag.proc_ag_vol(outfiles[2], tempdirprep("withd_irrV.csv"))
 
         ## Run the disaggregation model
-        matlabfn = "run_disaggregation('%s','%s','%s', '%s','%s', '%s', '%s');" % (runoff_file, chflow_file,basinqfile,  tempdir, outputdir, scenariotag,runid)
+        if transfer:
+            tflag = 1
+        else:
+            tflag = 0
+        matlabfn = "run_disaggregation('%s','%s','%s','%s', '%s', '%s','%s', '%s', %s, '%s');" % (runoff_file, chflow_file,basinqfile,rgnqfile,  tempdir, outputdir, scenariotag,runid, tflag, transfer_file)
         print 'current dir: %s ' % os.getcwd()
         print 'matlab fn:  %s' % matlabfn
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:
@@ -519,8 +553,10 @@ class NetcdfDemoModule(GcamModuleBase):
         hydro_rslts = self.cap_tbl['gcam-hydro'].fetch()
         water_rslts = self.cap_tbl['water-disaggregation'].fetch()
 
+        print 'water_rslts:\n%s' % str(water_rslts)
+
         chflow_file  = hydro_rslts['cflxfile']
-        basin_runoff = hydro_rslts['cbasinqfile']
+        transfer     = water_rslts['water-transfer']
 
         rcp = self.params['rcp']
         pop = self.params['pop']
@@ -537,12 +573,19 @@ class NetcdfDemoModule(GcamModuleBase):
 
             cfgfile.write('%s\n%s\n%s\n' % (rcp, pop, gdp))
             cfgfile.write('%s\n' % outfile)
-            cfgfile.write('%s\n' % chflow_file)
+            if transfer:
+                cfgfile.write('/lustre/data/rpl/gcam-driver/output/cmip5/no-data.dat\n')
+            else:
+                cfgfile.write('%s\n' % chflow_file)
             for var in ['wdirr', 'wdliv', 'wdelec', 'wdmfg', 'wdtotal', 'wddom', 'wsi']:
-                cfgfile.write('%s\n' % water_rslts[var])
+                if transfer:
+                    ## for water transfer cases, we don't have any gridded data, so substitute a grid full of NaN.
+                    cfgfile.write('/lustre/data/rpl/gcam-driver/output/cmip5/no-data.dat\n')
+                else:
+                    cfgfile.write('%s\n' % water_rslts[var])
             cfgfile.write('%s\n' % water_rslts['pop-demo'])
-            cfgfile.write('%s\n' % basin_runoff)
-            for var in ['basin-wdirr', 'basin-wdliv', 'basin-wdelec', 'basin-wdmfg', 'basin-wdtot', 'basin-wddom', 'basin-wsi']:
+            for var in ['basin-supply', 'basin-wdirr', 'basin-wdliv', 'basin-wdelec', 'basin-wdmfg', 'basin-wdtot', 'basin-wddom', 'basin-wsi',
+                        'rgn-supply', 'rgn-wdirr', 'rgn-wdliv', 'rgn-wdelec', 'rgn-wdmfg', 'rgn-wdtot', 'rgn-wddom', 'rgn-wsi']:
                 cfgfile.write('%s\n' % water_rslts[var])
 
             cfgfile.close()

@@ -9,9 +9,9 @@ regions_ordered = ["USA", "Canada", "Western Europe", "Japan", "Australia_NZ",
                    "Korea", "India"]
 
 ## For some reason I gave out a different order for the demo data
-regions_demo = ['Africa', 'Australia_NZ', 'Canada', 'China', 'Eastern Europe',
-                'Former Soviet Union', 'India', 'Japan', 'Korea', 'Latin America',
-                'Middle East', 'Southeast Asia', 'USA', 'Western Europe',]
+# regions_demo = ['Africa', 'Australia_NZ', 'Canada', 'China', 'Eastern Europe',
+#                 'Former Soviet Union', 'India', 'Japan', 'Korea', 'Latin America',
+#                 'Middle East', 'Southeast Asia', 'USA', 'Western Europe',]
 
 ## Year-2000 population benchmarks
 gis2000 = {"Africa" : 813123731,
@@ -104,7 +104,7 @@ def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo):
 
     table_output_ordered(outfile_fac, pop_fac)
     table_output_ordered(outfile_tot, pop_tot)
-    table_output_ordered(outfile_demo, pop_tot, ordering=regions_demo)
+    table_output_ordered(outfile_demo, pop_tot) # demo output now uses the normal ordering.
 
     return (pop_fac, pop_tot)
 
@@ -165,7 +165,7 @@ gfracFAO2005 = {
     "India"               :    0.672427639
 }
 
-def proc_wdlivestock(infilename, outfilename):
+def proc_wdlivestock(infilename, outfilename, rgnTotalFilename):
     wdliv_table = {}
     with open(infilename,"r") as infile:
         ## First read all of the lines in the file
@@ -192,6 +192,7 @@ def proc_wdlivestock(infilename, outfilename):
     goat    = {}
     poultry = {}
     pig     = {}
+    total_wd= {}
     ## loop over regions and compute the withdrawals for each livestock type
     for region in regions_ordered:
         total_bovine    = map(lambda x,y: x+y, wdliv_table[(region,"Beef")], wdliv_table[(region,"Dairy")])
@@ -206,6 +207,8 @@ def proc_wdlivestock(infilename, outfilename):
 
         poultry[region] = wdliv_table[(region,"Poultry")]
         pig[region]     = wdliv_table[(region,"Pork")]
+
+        total_wd[region] = map(lambda tb,sh,pt,pg: tb+sh+pt+pg, total_bovine, sheepgoat, poultry[region], pig[region])
     ## end of loop over regions
 
     ## write out each table.  the order is:
@@ -213,6 +216,9 @@ def proc_wdlivestock(infilename, outfilename):
     with open(outfilename,"w") as outfile:
         for table in [buffalo, cattle, goat, sheep, poultry, pig]:
             wtbl_numeric(outfile, table)
+
+    ## write the total water usage in another file
+    wtbl_numeric(rgnTotalFilename, total_wd)
     ## end of write-out
 
     ## return the master table, in case we want to do something else with it
@@ -227,7 +233,7 @@ def wtbl_numeric(outfilein, table):
         outfile = outfilein
         closeit = False
     else:
-        outfile = fopen(outfilein,"w")
+        outfile = open(outfilein,"w")
         closeit = True
 
     try:
