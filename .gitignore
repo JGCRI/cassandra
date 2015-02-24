@@ -40,7 +40,13 @@
 # Output 
 *.nc
 output/
+batch-out/
 model_interface.properties
+
+# Configurations for runs
+run-config/
+lamp-inputs/
+
 
 # original query file
 Main_queries_water.xml
