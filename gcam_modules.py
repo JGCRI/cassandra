@@ -306,12 +306,21 @@ class HydroModule(GcamModuleBase):
         workdir  = self.params["workdir"]
         inputdir = self.params["inputdir"] # input data from GCM
         outputdir = self.params["outputdir"] # destination for output files
-        initstorage = self.params["init-storage-file"] # matlab data file containing initial storage
         gcm      = self.params["gcm"]
         scenario = self.params["scenario"]
         runid    = self.params["runid"] # identifier for the GCM ensemble member
         logfile  = self.params["logfile"]
 
+        ## get initial channel storage from historical hydrology
+        ## module if available, or from self-parameters if not
+        ## XXX Should the self-parameters override the module or vice versa?
+        if self.cap_tbl.has_key('historical-hydro'):
+            hist_rslts = self.cap_tbl['historical-hydro'].fetch()
+            initstorage = hist_rslts['chstorfile']
+        else:
+            initstorage = self.params["init-storage-file"] # matlab data file containing initial storage
+
+        
         os.chdir(workdir)
 
         if inputdir[-1] != '/':
@@ -366,6 +375,9 @@ class HydroModule(GcamModuleBase):
         ## this output can name their files correctly.
         self.results['runid']      = runid
 
+        print 'qoutfile: %s' % qoutfile
+        print 'foutfile: %s' % foutfile
+        
         if not self.clobber: 
             allfiles = 1
             for file in [qoutfile, foutfile, cqfile, cflxfile, basinqfile, cbasinqfile, rgnqfile, crgnqfile]:
@@ -389,9 +401,94 @@ class HydroModule(GcamModuleBase):
                        "run_future_hydro('%s','%s','%s','%s', '%s','%s', '%s','%s','%s','%s', '%s', '%s');exit" %
                        (prefile,tempfile,dtrfile,initstorage, qoutfile,foutfile, cqfile,cflxfile,basinqfile,cbasinqfile, rgnqfile,crgnqfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
-        return sp.wait()
+            return sp.wait()
     ## end of runmod()
+
+
+## class for historical hydrology run.  This is similar to, but not
+## quite the same as, the main hydro module.
+## params:
+## workdir  - working directory for the matlab runs
+## inputdir - location of the input files    
+##  gcm     - Which GCM to use (each has its own historical data)
+## runid    - Tag indicating the run-id (e.g.  r1i1p1_195001_200512 )
+## outputdir- Destination directory for output    
+## logfile  - file to redirect matlab output to
+##
+## results:
+##   qoutfile - runoff grid (matlab format)
+## flxoutfile - stream flow grid (matlab format)
+## chstorfile - channel storage grid (matlab format)
+class HistoricalHydroModule(GcamModuleBase):
+    def __init__(self, cap_tbl):
+        super(HistoricalHydroModule, self).__init__(cap_tbl)
+        cap_tbl['historical-hydro'] = self
+
+    def runmod(self):
+        workdir   = self.params['workdir']
+        inputdir  = self.params['inputdir'] 
+        outputdir = self.params['outputdir']
+        gcm       = self.params['gcm']
+        scenario  = 'historical'
+        runid     = self.params['runid']
+        logfile   = self.params['logfile']
+
+        os.chdir(workdir)
+
+        if inputdir[-1] != '/':
+            inputdir = inputdir + '/'
+        if outputdir[-1] != '/':
+            outputdir = outputdir + '/'
         
+        ## we need to check existence of input and output files
+        prefile  = inputdir + 'pr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        tempfile = inputdir + 'tas_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        dtrfile  = inputdir + 'dtr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
+
+        print "input files:\n\t%s\n\t%s\n\t%s" % (prefile, tempfile, dtrfile)
+
+        msgpfx = "HistoricalHydroModule:  "
+        if not os.path.exists(prefile):
+            raise RuntimeError(msgpfx + "missing input file: " + prefile)
+        if not os.path.exists(tempfile):
+            raise RuntimeError(msgpfx + "missing input file: " + tempfile)
+        if not os.path.exists(dtrfile):
+            raise RuntimeError(msgpfx + "missing input file: " + dtrfile)
+
+        ## output filenames
+        qoutfile = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        foutfile = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        chstorfile = outputdir + 'InitChStor_' + gcm + '_' + scenario + '_' + runid + '.mat'
+
+        ## Results will be these file names.  Set up the results
+        ## entries now, even though the files won't be ready yet.
+        self.results['qoutfile'] = qoutfile
+        self.results['foutfile'] = foutfile
+        self.results['chstorfile'] = chstorfile
+
+        ## Test to see if the outputs already exist.  If so, then we can skip these calcs.
+        if not self.clobber:
+            allfiles = 1
+            for file in [qoutfile, foutfile, chstorfile]:
+                if not os.path.exists(file):
+                    allfiles = 0
+                    break
+            if allfiles:
+                print "HistoricalHydroModule: results exist and no clobber set.  Skipping."
+                self.results['changed'] = 0
+                return 0        # success code
+
+        ## If we get here, then we need to run the historical
+        ## hydrology.  Same comments apply as to the regular hydrology
+        ## module.
+        print 'Running historical hydrology for gcm= %s   runid= %s' % (gcm, runid)
+        with open(logfile,'w') as logdata, open('/dev/null','r') as null:
+            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
+                       "run_historical_hydro('%s', '%s', '%s', '%s', '%s', '%s');exit" %
+                       (prefile, tempfile, dtrfile, chstorfile, qoutfile, foutfile)]
+            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
+            return sp.wait()
+    
 ## class for the water disaggregation code
 ## params
 ##    workdir  - working directory
