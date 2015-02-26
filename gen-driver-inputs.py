@@ -108,7 +108,7 @@ for gcm in gcms:
             with open(batchfile, 'w') as bat:
                 bat.write('#PBS -l nodes=1\n#PBS -l walltime=3:00:00:00\n#PBS -Agcam\n\n')
                 bat.write('cd /lustre/data/rpl/gcam-driver\ndate\ntap -q matlab\ntap java6\n')
-                bat.write('time ./gcam_driver.py ./%s\n' % cfgfile)
+                bat.write('time ./gcam-driver ./%s\n' % cfgfile)
                 bat.write('date')
 
             launchstr = 'qsub %s' % batchfile

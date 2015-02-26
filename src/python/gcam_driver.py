@@ -1,9 +1,14 @@
 #!/bin/env python
+import sys
 import re
 import threading
 from gcam_modules import *
 
-## usage: gcam_driver.py <configfile> 
+## usage: gcam_driver.py <configfile>
+
+## arrange so that when run from the top-level directory we still find
+## the modules we want to load.
+sys.path.append('./src/python')
 
 def gcam_parse(cfgfile_name):
     ## initialize the structures that will receive the data we are

@@ -4,8 +4,10 @@ hist_runid = 'r1i1p1_195001_200512'
 fut_runid  = 'r1i1p1_200601_210012'
 
 #gcms = ['GFDL_CM3', 'HadGEM2_ES', 'IPSL_CM5A_LR']
-gcms = ['GFDL_CM3', 'IPSL_CM5A_LR'] # HadGEM2 needs special treatment
-scenarios = ['rcp45','rcp85']
+# gcms = ['GFDL_CM3', 'IPSL_CM5A_LR'] # HadGEM2 needs special treatment
+# scenarios = ['rcp45','rcp85']
+gcms = ['GFDL_CM3']
+scenarios = ['rcp45']
 
 for gcm in gcms:
     for scen in scenarios:
@@ -22,7 +24,7 @@ for gcm in gcms:
             ## write historical hydro section
             cfg.write('[HistoricalHydroModule]\nworkdir = /lustre/data/rpl/GCAMhydro\n' +
                       'inputdir = /lustre/data/CMIP5-data/CMIP5_preprocessed\n' +
-                      'outputdir = /lustre/data/rpl/gcam-driver/output/LAMP\n'+
+                      'outputdir = /lustre/data/rpl/gcam-driver/output/test\n'+
                       'clobber = False\n')
             logfilestr = 'logfile = /lustre/data/rpl/GCAMhydro/logs/%s-historical-hydro.txt\n' % gcm
             cfg.write(logfilestr)
@@ -34,7 +36,7 @@ for gcm in gcms:
             ## write future hydro section
             cfg.write('\n[HydroModule]\nworkdir = /lustre/data/rpl/GCAMhydro\n' +
                       'inputdir = /lustre/data/CMIP5-data/CMIP5_preprocessed\n' +
-                      'outputdir = /lustre/data/rpl/gcam-driver/output/LAMP\n' +
+                      'outputdir = /lustre/data/rpl/gcam-driver/output/test\n' +
                       'clobber = False\n')
             logfilestr = 'logfile = /lustre/data/rpl/GCAMhydro/logs/%s-%s-future-hydro.txt\n' % (gcm, scen)
             cfg.write(logfilestr)
@@ -48,9 +50,9 @@ for gcm in gcms:
         with open(batchfile, 'w') as bat:
             bat.write('#PBS -l nodes=1\n#PBS -l walltime=3:00:00:00\n#PBS -Agcam\n\n')
             bat.write('cd /lustre/data/rpl/gcam-driver\ndate\ntap -q matlab\ntap java6\n')
-            bat.write('time ./gcam_driver.py ./%s\n' % cfgfile)
+            bat.write('time ./gcam-driver ./%s\n' % cfgfile)
             bat.write('date')
             
-            launchstr = 'qsub %s' % batchfile
-            print launchstr
-            os.system(launchstr)
+        launchstr = 'qsub %s' % batchfile
+        print launchstr
+        os.system(launchstr)
