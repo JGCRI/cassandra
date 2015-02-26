@@ -64,7 +64,7 @@ for gcm in gcms:
                           'clobber = %s\n'% clobber_disag) 
                 logfile  = '/lustre/data/rpl/GCAMhydro/logs/%s-disag-log.txt' % runname
                 cfg.write('logfile = %s\n' % logfile)
-                tempdir  = '/lustre/data/rpl/gcam-driver/output/wdtmp-%s'% runname
+                tempdir  = '/lustre/data/rpl/gcam-driver/output/waterdisag/wdtmp-%s'% runname
                 try:
                     os.makedirs(tempdir)
                 except OSError:
