@@ -287,7 +287,8 @@ class GcamModule(GcamModuleBase):
 ##       gcm - GCM outputs to use
 ##  scenario - tag indicating the scenario to use.
 ##     runid - tag indicating which ensemble member to use.
-##   logfile - file to direct the matlab code's output to    
+##   logfile - file to direct the matlab code's output to
+## startmonth- month of year for first month in dataset. 1=Jan, 2=Feb, etc.  (OPTIONAL)            
 ##
 ## results: 
 ##   qoutfile - runoff grid (matlab format)
@@ -310,6 +311,11 @@ class HydroModule(GcamModuleBase):
         scenario = self.params["scenario"]
         runid    = self.params["runid"] # identifier for the GCM ensemble member
         logfile  = self.params["logfile"]
+        try:
+            startmonth = int(self.params['startmonth'])
+        except KeyError:
+            startmonth = 1      # Default is to start at the beginning of the year
+        print '[HydroModule]: start month = %d' % startmonth
 
         ## get initial channel storage from historical hydrology
         ## module if available, or from self-parameters if not
@@ -398,8 +404,8 @@ class HydroModule(GcamModuleBase):
         print 'Running the matlab hydrology code'
         with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_future_hydro('%s','%s','%s','%s', '%s','%s', '%s','%s','%s','%s', '%s', '%s');exit" %
-                       (prefile,tempfile,dtrfile,initstorage, qoutfile,foutfile, cqfile,cflxfile,basinqfile,cbasinqfile, rgnqfile,crgnqfile)]
+                       "run_future_hydro('%s','%s','%s','%s', %d, '%s','%s', '%s','%s','%s','%s', '%s', '%s');exit" %
+                       (prefile,tempfile,dtrfile,initstorage,startmonth, qoutfile,foutfile, cqfile,cflxfile,basinqfile,cbasinqfile, rgnqfile,crgnqfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
             return sp.wait()
     ## end of runmod()
@@ -414,6 +420,7 @@ class HydroModule(GcamModuleBase):
 ## runid    - Tag indicating the run-id (e.g.  r1i1p1_195001_200512 )
 ## outputdir- Destination directory for output    
 ## logfile  - file to redirect matlab output to
+## startmonth- month of year for first month in dataset (OPTIONAL)
 ##
 ## results:
 ##   qoutfile - runoff grid (matlab format)
@@ -432,6 +439,11 @@ class HistoricalHydroModule(GcamModuleBase):
         scenario  = 'historical'
         runid     = self.params['runid']
         logfile   = self.params['logfile']
+        try:
+            startmonth = int(self.params['startmonth'])
+        except KeyError:
+            startmonth = 1      # Default is January
+        print '[HistoricalHydroModule]: start month = %d' % startmonth
 
         os.chdir(workdir)
 
@@ -484,8 +496,8 @@ class HistoricalHydroModule(GcamModuleBase):
         print 'Running historical hydrology for gcm= %s   runid= %s' % (gcm, runid)
         with open(logfile,'w') as logdata, open('/dev/null','r') as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_historical_hydro('%s', '%s', '%s', '%s', '%s', '%s');exit" %
-                       (prefile, tempfile, dtrfile, chstorfile, qoutfile, foutfile)]
+                       "run_historical_hydro('%s', '%s', '%s', %d, '%s', '%s', '%s');exit" %
+                       (prefile, tempfile, dtrfile, 1, chstorfile, qoutfile, foutfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
             return sp.wait()
     
