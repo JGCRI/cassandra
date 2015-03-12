@@ -416,8 +416,8 @@ class HydroModule(GcamModuleBase):
         print 'Running the matlab hydrology code'
         with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_future_hydro('%s','%s','%s','%s', %d, '%s','%s', '%s','%s','%s','%s', '%s', '%s');exit" %
-                       (prefile,tempfile,dtrfile,initstorage,startmonth, qoutfile,foutfile, cqfile,cflxfile,basinqfile,cbasinqfile, rgnqfile,crgnqfile)]
+                       "run_future_hydro('%s','%s','%s','%s', %d, '%s','%s', '%s','%s');exit" %
+                       (prefile,tempfile,dtrfile,initstorage, startmonth, qoutfile,foutfile, basinqfile,rgnqfile,)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
             return sp.wait()
     ## end of runmod()
