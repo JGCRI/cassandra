@@ -354,12 +354,14 @@ class HydroModule(GcamModuleBase):
         foutbase = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid
         boutbase = outputdir + 'basin_runoff_235_' + gcm + '_' + scenario + '_' + runid
         routbase = outputdir + 'rgn_runoff_235_'+gcm+'_' + scenario + '_' + runid
+        petoutbase = outputdir + 'Avg_PET_235_' + gcm + '_' + scenario + '_' + runid
         
         ## matlab files for future processing steps 
         qoutfile   = qoutbase + '.mat'
         foutfile   = foutbase + '.mat'
         basinqfile = boutbase + '.mat'
         rgnqfile   = routbase + '.mat'
+        petoutfile = petoutbase + '.mat'
         ## c-data files for final output
         cqfile     = qoutbase + '.dat'
         cflxfile   = foutbase + '.dat'
@@ -382,6 +384,7 @@ class HydroModule(GcamModuleBase):
         self.results['crgnqfile']  = crgnqfile
         self.results['basinqtbl']  = basinqtblfile
         self.results['rgnqtbl']    = rgnqtblfile
+        self.results['petoutfile'] = petoutfile
         
         ## We need to report the runid so that other modules that use
         ## this output can name their files correctly.
@@ -391,7 +394,7 @@ class HydroModule(GcamModuleBase):
         if not self.clobber: 
             allfiles = 1
             for file in [qoutfile, foutfile, cqfile, cflxfile, basinqfile, cbasinqfile, rgnqfile, crgnqfile,
-                         basinqtblfile, rgnqtblfile]:
+                         basinqtblfile, rgnqtblfile, petoutfile]:
                 if not os.path.exists(file):
                     allfiles = 0
                     break
@@ -416,8 +419,8 @@ class HydroModule(GcamModuleBase):
         print 'Running the matlab hydrology code'
         with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_future_hydro('%s','%s','%s','%s', %d, '%s','%s', '%s','%s');exit" %
-                       (prefile,tempfile,dtrfile,initstorage, startmonth, qoutfile,foutfile, basinqfile,rgnqfile,)]
+                       "run_future_hydro('%s','%s','%s','%s', %d, '%s','%s','%s', '%s','%s');exit" %
+                       (prefile,tempfile,dtrfile,initstorage, startmonth, qoutfile,foutfile,petoutfile, basinqfile,rgnqfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
             return sp.wait()
     ## end of runmod()
@@ -481,6 +484,7 @@ class HistoricalHydroModule(GcamModuleBase):
 
         ## output filenames
         qoutfile      = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        petoutfile    = outputdir + 'Avg_PET_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
         basinqtblfile = outputdir + 'basin_runoff_235_' + gcm + '_' + scenario + '_' + runid + '.csv'
         rgnqtblfile   = outputdir + 'rgn_runoff_235_' + gcm + '_' + scenario + '_' + runid + '.csv'        
         foutfile      = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
@@ -493,11 +497,12 @@ class HistoricalHydroModule(GcamModuleBase):
         self.results['chstorfile'] = chstorfile
         self.results['basinqtbl']  = basinqtblfile
         self.results['rgnqtbl']    = rgnqtblfile
+        self.results['petoutfile'] = petoutfile
 
         ## Test to see if the outputs already exist.  If so, then we can skip these calcs.
         if not self.clobber:
             allfiles = 1
-            for file in [qoutfile, foutfile, chstorfile, basinqtblfile, rgnqtblfile]:
+            for file in [qoutfile, foutfile, petoutfile, chstorfile, basinqtblfile, rgnqtblfile]:
                 if not os.path.exists(file):
                     allfiles = 0
                     break
@@ -512,8 +517,8 @@ class HistoricalHydroModule(GcamModuleBase):
         print 'Running historical hydrology for gcm= %s   runid= %s' % (gcm, runid)
         with open(logfile,'w') as logdata, open('/dev/null','r') as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_historical_hydro('%s', '%s', '%s', %d, '%s', '%s', '%s', '%s', '%s');exit" %
-                       (prefile, tempfile, dtrfile, 1, chstorfile, qoutfile, foutfile, basinqtblfile, rgnqtblfile)]
+                       "run_historical_hydro('%s', '%s', '%s', %d, '%s', '%s','%s', '%s', '%s', '%s');exit" %
+                       (prefile, tempfile, dtrfile, 1, chstorfile, qoutfile, foutfile,petoutfile, basinqtblfile, rgnqtblfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
             return sp.wait()
     
