@@ -1,14 +1,9 @@
 #!/bin/env python
-import sys
 import re
 import threading
 from gcam_modules import *
 
 ## usage: gcam_driver.py <configfile>
-
-## arrange so that when run from the top-level directory we still find
-## the modules we want to load.
-sys.path.append('./src/python')
 
 def gcam_parse(cfgfile_name):
     ## initialize the structures that will receive the data we are
@@ -81,9 +76,14 @@ def gcam_parse(cfgfile_name):
 ## end of gcam_parse
 
 if __name__ == "__main__":
-    from sys import argv
+    import sys
 
-    (modlist, cap_table) = gcam_parse(argv[1])
+    ## arrange so that when run from the top-level directory we still find
+    ## the modules we want to load.
+    sys.path.append('./src/python')
+
+    
+    (modlist, cap_table) = gcam_parse(sys.argv[1])
 
     ## We will look up "global" in the cap_table and process any
     ## global parameters here, but in the current version we don't
