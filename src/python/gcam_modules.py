@@ -365,7 +365,10 @@ class HydroModule(GcamModuleBase):
         cflxfile   = foutbase + '.dat'
         cbasinqfile = boutbase + '.dat'
         crgnqfile  = routbase + '.dat'
-
+        ## csv tables for diagnostics
+        basinqtblfile  = boutbase + '.csv'
+        rgnqtblfile    = routbase + '.csv'
+        
         ## Our result is the location of these output files.  Set that
         ## now, even though the files won't be created until we're
         ## done running.
@@ -377,16 +380,18 @@ class HydroModule(GcamModuleBase):
         self.results['cbasinqfile'] = cbasinqfile
         self.results['rgnqfile']   = rgnqfile
         self.results['crgnqfile']  = crgnqfile
+        self.results['basinqtbl']  = basinqtblfile
+        self.results['rgnqtbl']    = rgnqtblfile
+        
         ## We need to report the runid so that other modules that use
         ## this output can name their files correctly.
         self.results['runid']      = runid
 
-        print 'qoutfile: %s' % qoutfile
-        print 'foutfile: %s' % foutfile
         
         if not self.clobber: 
             allfiles = 1
-            for file in [qoutfile, foutfile, cqfile, cflxfile, basinqfile, cbasinqfile, rgnqfile, crgnqfile]:
+            for file in [qoutfile, foutfile, cqfile, cflxfile, basinqfile, cbasinqfile, rgnqfile, crgnqfile,
+                         basinqtblfile, rgnqtblfile]:
                 if not os.path.exists(file):
                     allfiles = 0
                     break
@@ -401,6 +406,13 @@ class HydroModule(GcamModuleBase):
         ##       suitable batch language.  Notably, if it encounters an error
         ##       it will stop at a command prompt instead of exiting with an
         ##       error code.  Yuck.
+
+        ## Note that unlike the historical version, we don't have to
+        ## pass the names of the basin and region table files, since
+        ## the code can infer them from the basinqfile and rgnqfile
+        ## parameters. 
+        ## TODO: prune the number of filenames passed by inferring all
+        ## of the cfoofile filenames the same way.
         print 'Running the matlab hydrology code'
         with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
@@ -468,20 +480,24 @@ class HistoricalHydroModule(GcamModuleBase):
             raise RuntimeError(msgpfx + "missing input file: " + dtrfile)
 
         ## output filenames
-        qoutfile = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
-        foutfile = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
-        chstorfile = outputdir + 'InitChStor_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        qoutfile      = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        basinqtblfile = outputdir + 'basin_runoff_235_' + gcm + '_' + scenario + '_' + runid + '.csv'
+        rgnqtblfile   = outputdir + 'rgn_runoff_235_' + gcm + '_' + scenario + '_' + runid + '.csv'        
+        foutfile      = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        chstorfile    = outputdir + 'InitChStor_' + gcm + '_' + scenario + '_' + runid + '.mat'
 
         ## Results will be these file names.  Set up the results
         ## entries now, even though the files won't be ready yet.
         self.results['qoutfile'] = qoutfile
         self.results['foutfile'] = foutfile
         self.results['chstorfile'] = chstorfile
+        self.results['basinqtbl']  = basinqtblfile
+        self.results['rgnqtbl']    = rgnqtblfile
 
         ## Test to see if the outputs already exist.  If so, then we can skip these calcs.
         if not self.clobber:
             allfiles = 1
-            for file in [qoutfile, foutfile, chstorfile]:
+            for file in [qoutfile, foutfile, chstorfile, basinqtblfile, rgnqtblfile]:
                 if not os.path.exists(file):
                     allfiles = 0
                     break
@@ -496,8 +512,8 @@ class HistoricalHydroModule(GcamModuleBase):
         print 'Running historical hydrology for gcm= %s   runid= %s' % (gcm, runid)
         with open(logfile,'w') as logdata, open('/dev/null','r') as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_historical_hydro('%s', '%s', '%s', %d, '%s', '%s', '%s');exit" %
-                       (prefile, tempfile, dtrfile, 1, chstorfile, qoutfile, foutfile)]
+                       "run_historical_hydro('%s', '%s', '%s', %d, '%s', '%s', '%s', '%s', '%s');exit" %
+                       (prefile, tempfile, dtrfile, 1, chstorfile, qoutfile, foutfile, basinqtblfile, rgnqtblfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
             return sp.wait()
     
