@@ -390,19 +390,13 @@ class HydroModule(GcamModuleBase):
         ## this output can name their files correctly.
         self.results['runid']      = runid
 
-        
-        if not self.clobber: 
-            allfiles = 1
-            for file in [qoutfile, foutfile, cqfile, cflxfile, basinqfile, cbasinqfile, rgnqfile, crgnqfile,
-                         basinqtblfile, rgnqtblfile, petoutfile]:
-                if not os.path.exists(file):
-                    allfiles = 0
-                    break
-            if allfiles:
-                ## all files exist, and we don't want to clobber them
-                print "HydroModule:  results exist and no clobber.  Skipping."
-                self.results["changed"] = 0 # mark cached results as clean
-                return 0        # success code
+        alloutfiles = [qoutfile, foutfile, cqfile, cflxfile, basinqfile, cbasinqfile,
+                       rgnqfile, crgnqfile, basinqtblfile, rgnqtblfile, petoutfile]
+        if not self.clobber and gcamutil.allexist(alloutfiles):
+            ## all files exist, and we don't want to clobber them
+            print "[HydroModule]:  results exist and no clobber.  Skipping."
+            self.results["changed"] = 0 # mark cached results as clean
+            return 0        # success code
 
         ## Run the matlab code.
         ## TODO: eventually we need to move away from matlab, as it is not a
@@ -422,7 +416,13 @@ class HydroModule(GcamModuleBase):
                        "run_future_hydro('%s','%s','%s','%s', %d, '%s','%s','%s', '%s','%s');exit" %
                        (prefile,tempfile,dtrfile,initstorage, startmonth, qoutfile,foutfile,petoutfile, basinqfile,rgnqfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
-            return sp.wait()
+            rc = sp.wait()
+        ## matlab often won't return an error code when it fails, so check to see that all files were created
+        if gcamutil.allexist(alloutfiles):
+            return rc
+        else:
+            stderr.write('[HydroModule]: Some output files missing.  Check logfile (%s) for more information\n'%logfile)
+            return 1            # nonzero return code indicates failure
     ## end of runmod()
 
 
@@ -500,16 +500,11 @@ class HistoricalHydroModule(GcamModuleBase):
         self.results['petoutfile'] = petoutfile
 
         ## Test to see if the outputs already exist.  If so, then we can skip these calcs.
-        if not self.clobber:
-            allfiles = 1
-            for file in [qoutfile, foutfile, petoutfile, chstorfile, basinqtblfile, rgnqtblfile]:
-                if not os.path.exists(file):
-                    allfiles = 0
-                    break
-            if allfiles:
-                print "HistoricalHydroModule: results exist and no clobber set.  Skipping."
-                self.results['changed'] = 0
-                return 0        # success code
+        alloutfiles = [qoutfile, foutfile, petoutfile, chstorfile, basinqtblfile, rgnqtblfile]
+        if not self.clobber and gcamutil.allexist(alloutfiles):
+            print "[HistoricalHydroModule]: results exist and no clobber set.  Skipping."
+            self.results['changed'] = 0
+            return 0        # success code
 
         ## If we get here, then we need to run the historical
         ## hydrology.  Same comments apply as to the regular hydrology
@@ -520,7 +515,13 @@ class HistoricalHydroModule(GcamModuleBase):
                        "run_historical_hydro('%s', '%s', '%s', %d, '%s', '%s','%s', '%s', '%s', '%s');exit" %
                        (prefile, tempfile, dtrfile, 1, chstorfile, qoutfile, foutfile,petoutfile, basinqtblfile, rgnqtblfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
-            return sp.wait()
+            rc = sp.wait()
+        ## check to see if the outputs were actually created; matlab will sometimes fail silently
+        if gcamutil.allexist(alloutfiles):
+            return rc
+        else:
+            stderr.write('[HistoricalHydroModule]: Some output files were not created.  Check logfile (%s) for details.\n'%logfile)
+            return 1            # nonzero indicates failure
     
 ## class for the water disaggregation code
 ## params

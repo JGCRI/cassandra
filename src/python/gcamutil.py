@@ -1,4 +1,5 @@
 import os
+import os.path
 import re
 import subprocess
 import tempfile
@@ -156,3 +157,12 @@ def chomp(string):
         return string[:i]
     else:
         return string
+
+## test a list of files to see if all exist
+def allexist(files):
+    allfiles = True
+    for file in files:
+        if not os.path.exists(file):
+            allfiles = False
+            break
+    return allfiles
