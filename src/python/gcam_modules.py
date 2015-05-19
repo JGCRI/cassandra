@@ -529,6 +529,7 @@ class HistoricalHydroModule(GcamModuleBase):
 ##  outputdir  - directory for outputs
 ##   inputdir  - directory for static inputs
 ##   scenario  - scenario tag
+##     rgnmap  - region mapping file
 ##
 ## results:  c-style binary files for each of the following variables
 ##           (the key is the variable name; the value is the filename):
@@ -561,6 +562,11 @@ class WaterDisaggregationModule(GcamModuleBase):
         tempdir       = self.params["tempdir"]  # location for intermediate files produced by dbxml queries
         inputdir      = self.params["inputdir"] # static inputs, such as irrigation share and query files.
         scenariotag   = self.params["scenario"]
+        if self.params.has_key('rgnmap'):
+            rgnmap = self.params['rgnmap']
+        else:
+            stdout.write('[WaterDisaggregationModule]: using default region mapping.')
+            rgnmap = 'inputs/newgrd_GCAM.csv'
         ## Parse the water transfer parameters.
         if self.params.has_key('water-transfer'):
             transfer      = gcamutil.parseTFstring(self.params['water-transfer'])
@@ -656,7 +662,7 @@ class WaterDisaggregationModule(GcamModuleBase):
             tflag = 1
         else:
             tflag = 0
-        matlabfn = "run_disaggregation('%s','%s','%s','%s', '%s', '%s','%s', '%s', %s, '%s');" % (runoff_file, chflow_file,basinqfile,rgnqfile,  tempdir, outputdir, scenariotag,runid, tflag, transfer_file)
+        matlabfn = "run_disaggregation('%s','%s','%s','%s', '%s', '%s','%s','%s', '%s', %s, '%s');" % (runoff_file, chflow_file,basinqfile,rgnqfile,  rgnmap, tempdir, outputdir, scenariotag,runid, tflag, transfer_file)
         print 'current dir: %s ' % os.getcwd()
         print 'matlab fn:  %s' % matlabfn
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:
