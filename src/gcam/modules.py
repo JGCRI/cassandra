@@ -6,8 +6,7 @@ import threading
 import tempfile
 from sys import stdout
 from sys import stderr
-import gcamutil
-from gcamutil import *
+from gcam import util
 
 ##### Definitions for the modules for GCAM and associated downstream models
 
@@ -147,7 +146,7 @@ class GcamModuleBase(object):
         ## version too.
         self.clobber = True          # default to overwriting outputs
         if "clobber" in self.params: 
-            self.clobber = parseTFstring(self.params["clobber"])
+            self.clobber = util.parseTFstring(self.params["clobber"])
 
         ## processing for additional common parameters go here
         return
@@ -183,7 +182,7 @@ class GlobalParamsModule(GcamModuleBase):
 
         ## We need to allow gcamutil access to thiese parameters, since it doesn't otherwise know how to find the
         ## global params module.  
-        gcamutil.genparams = self.params
+        util.genparams = self.params
         self.complete = 1       # nothing to do, so we're always complete
         
     def runmod(self):
@@ -392,7 +391,7 @@ class HydroModule(GcamModuleBase):
 
         alloutfiles = [qoutfile, foutfile, cqfile, cflxfile, basinqfile, cbasinqfile,
                        rgnqfile, crgnqfile, basinqtblfile, rgnqtblfile, petoutfile]
-        if not self.clobber and gcamutil.allexist(alloutfiles):
+        if not self.clobber and util.allexist(alloutfiles):
             ## all files exist, and we don't want to clobber them
             print "[HydroModule]:  results exist and no clobber.  Skipping."
             self.results["changed"] = 0 # mark cached results as clean
@@ -418,7 +417,7 @@ class HydroModule(GcamModuleBase):
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
             rc = sp.wait()
         ## matlab often won't return an error code when it fails, so check to see that all files were created
-        if gcamutil.allexist(alloutfiles):
+        if util.allexist(alloutfiles):
             return rc
         else:
             stderr.write('[HydroModule]: Some output files missing.  Check logfile (%s) for more information\n'%logfile)
@@ -501,7 +500,7 @@ class HistoricalHydroModule(GcamModuleBase):
 
         ## Test to see if the outputs already exist.  If so, then we can skip these calcs.
         alloutfiles = [qoutfile, foutfile, petoutfile, chstorfile, basinqtblfile, rgnqtblfile]
-        if not self.clobber and gcamutil.allexist(alloutfiles):
+        if not self.clobber and util.allexist(alloutfiles):
             print "[HistoricalHydroModule]: results exist and no clobber set.  Skipping."
             self.results['changed'] = 0
             return 0        # success code
@@ -517,7 +516,7 @@ class HistoricalHydroModule(GcamModuleBase):
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
             rc = sp.wait()
         ## check to see if the outputs were actually created; matlab will sometimes fail silently
-        if gcamutil.allexist(alloutfiles):
+        if util.allexist(alloutfiles):
             return rc
         else:
             stderr.write('[HistoricalHydroModule]: Some output files were not created.  Check logfile (%s) for details.\n'%logfile)
@@ -543,7 +542,7 @@ class WaterDisaggregationModule(GcamModuleBase):
         cap_tbl["water-disaggregation"] = self
 
     def runmod(self):
-        import waterdisag
+        import gcam.water.waterdisag
 
         workdir  = self.params["workdir"]
         os.chdir(workdir)
@@ -569,7 +568,7 @@ class WaterDisaggregationModule(GcamModuleBase):
             rgnmap = 'inputs/newgrd_GCAM.csv'
         ## Parse the water transfer parameters.
         if self.params.has_key('water-transfer'):
-            transfer      = gcamutil.parseTFstring(self.params['water-transfer'])
+            transfer      = util.parseTFstring(self.params['water-transfer'])
             try:
                 transfer_file = self.params['transfer-file']
             except KeyError:
@@ -629,7 +628,7 @@ class WaterDisaggregationModule(GcamModuleBase):
                       'batch-water-mfg.csv', 'batch-water-mining.csv']
         queryfiles = map(inputdirprep, queryfiles)
         outfiles = map(tempdirprep, outfiles)
-        gcamutil.gcam_query(queryfiles, dbxmlfile, outfiles)
+        util.gcam_query(queryfiles, dbxmlfile, outfiles)
 
         ### reformat the GCAM outputs into the files the matlab code needs 
         ### note all the csv files referred to here are temporary

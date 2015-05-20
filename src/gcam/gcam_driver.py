@@ -1,7 +1,6 @@
 #!/bin/env python
 import re
 import threading
-from gcam_modules import *
 
 ## usage: gcam_driver.py <configfile>
 
@@ -77,10 +76,12 @@ def gcam_parse(cfgfile_name):
 
 if __name__ == "__main__":
     import sys
+    import os
 
     ## arrange so that when run from the top-level directory we still find
     ## the modules we want to load.
-    sys.path.append('./src/python')
+    sys.path.append(os.getcwd()+'/src')
+    from gcam.modules import *
 
     
     (modlist, cap_table) = gcam_parse(sys.argv[1])

@@ -1,7 +1,7 @@
-import gcamutil
-import waterdisag
+from gcam import util
+from gcam.water import waterdisag
 
-gcamutil.genparams = {"ModelInterface" : "/lustre/data/rpl/ModelInterface/ModelInterface.jar",
+util.genparams = {"ModelInterface" : "/lustre/data/rpl/ModelInterface/ModelInterface.jar",
                       "DBXMLlib" : "/homes/pralitp/libs/dbxml-2.5.16/install/lib"}
 
 dbxml_file = "/lustre/data/rpl/gcam-water/SSP_Scen0.dbxml"
@@ -20,7 +20,7 @@ outfiles = ['batch-land-alloc.csv', 'batch-population.csv', 'batch-water-ag.csv'
 
 outfiles = map(lambda file: '/lustre/data/rpl/gcam-driver/output/' + file, outfiles)
 
-of_new = gcamutil.gcam_query(queryfiles, dbxml_file, outfiles)
+of_new = util.gcam_query(queryfiles, dbxml_file, outfiles)
 
 ## process the non-ag water
 wd_dom  = waterdisag.proc_wdnonag('output/batch-water-dom.csv', 'output/final_wd_dom.csv')

@@ -1,5 +1,5 @@
 #!/bin/env python
-import gcamutil
+from gcam import util
 import re
 
 ## Canonical ordering of the regions for outputs
@@ -41,8 +41,8 @@ def rd_gcam_table(filename, njunk=0):
         file.readline()
 
         for line in file:
-            line = gcamutil.rm_trailing_comma(line)
-            linefix = gcamutil.scenariofix(line)
+            line = util.rm_trailing_comma(line)
+            linefix = util.scenariofix(line)
             ## split off the first two columns
             linesplit = linefix.split(',',2+njunk)
 
@@ -174,7 +174,7 @@ def proc_wdlivestock(infilename, outfilename, rgnTotalFilename):
         infile.readline()
 
         for line in infile:
-            line = gcamutil.rm_trailing_comma(gcamutil.scenariofix(line))
+            line = util.rm_trailing_comma(util.scenariofix(line))
             fields = line.split(',',4) # leave the yearly data in one big string for a moment
             region = fields[1]
             sector = fields[3]
@@ -279,7 +279,7 @@ def proc_irr_share(infilename, outfile):
         infile.readline()
 
         for line in infile:
-            line   = gcamutil.rm_trailing_comma(gcamutil.chomp(line))
+            line   = util.rm_trailing_comma(util.chomp(line))
             fields = line.split(',')
             crop   = fields.pop()
             region = fields.pop()
@@ -314,7 +314,7 @@ def proc_ag_area(infilename, outfilename):
             infile.readline()
 
             for line in infile:
-                line = gcamutil.rm_trailing_comma(gcamutil.scenariofix(line))
+                line = util.rm_trailing_comma(util.scenariofix(line))
                 #print line
                 fields = line.split(',')
                 rgntxt = fields[1]
@@ -361,7 +361,7 @@ def proc_ag_vol(infilename, outfilename):
             infile.readline()
 
             for line in infile:
-                line    = gcamutil.rm_trailing_comma(gcamutil.scenariofix(line))
+                line    = util.rm_trailing_comma(util.scenariofix(line))
                 fields  = line.split(',')
                 rgntxt  = fields[1]
                 croptxt = fields[2] 
