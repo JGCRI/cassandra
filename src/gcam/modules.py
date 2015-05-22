@@ -1,3 +1,33 @@
+"""Definitions for the modules for GCAM and associated downstream models.
+
+We use the word "module" here in a bit of a nonstandard way.  A GCAM
+"module" is a functional unit that performs a specific step in the
+GCAM processing pipeline.  These modules are distinct from python
+modules; a GCAM module may be implemented in one or several python
+modules of its own (as in the water disaggregation module), or it may
+be completely contained in this module.
+
+Classes:
+
+GcamModuleBase    - Base class for all GCAM modules.  Provides the 
+                    interface, as well as services like managing
+                    threads, locks, and condition variables.
+
+GlobalParamsModule - Store parameters common to all modules.
+
+GcamModule        - Run the GCAM core model.
+
+HydroModule       - Run the future hydrology calculation.
+
+HistoricalHydroModule - Run the historical hydrology calculation.
+
+WaterDisaggregationModule - Run the water disaggregation calculation.
+
+NetcdfDemoModule  - Package outputs into a netCDF file for the 
+                    February 2015 demo.
+
+"""
+
 import os
 import os.path
 import re
@@ -8,79 +38,96 @@ from sys import stdout
 from sys import stderr
 from gcam import util
 
-##### Definitions for the modules for GCAM and associated downstream models
-
-#### A common base class for all of the modules.  We can put any
-#### utility functions that are common to all modules here, but its
-#### main purpose is to provide all the multithreading functionality
-#### so that the individual modules can focus exclusively on doing
-#### their particular tasks.
-####
-#### Methods that shouldn't be overridden:
-
-####    run(): start the module running.  The params argument should
-####           be a dictionary containing the parameters the module
-####           needs (probably parsed from the initial config).  Each
-####           subclass should provide a method called runmod() that
-####           performs the module's work; that method will be called
-####           from run().  The runmod() method should return 0 on
-####           successful completion.  Note that we don't make any
-####           effort to limit the number of concurrent threads beyond
-####           the inherent limitations imposed by data dependencies
-####           between the modules.  This method returns the thread
-####           object, mainly so that the driver can call join() on
-####           all of the module threads. 
-####           TODO: implement an active thread counter.
-
-#### runmod_wrapper(): used internally by run().  Don't monkey around
-####           with this function.
-
-####  fetch(): retrieve the module's results.  If the module hasn't
-####           completed yet, wait to be notified of completion.  This
-####           mechanism implicitly enforces correct ordering between
-####           modules.  Note that we don't make any checks for
-####           deadlock caused by circular dependencies.
-
-#### addparam(): Add a key and value to the params array.  Generally
-####             this should only be done in the config file parser.
-####             And yes, I am aware that having a function to do this
-####             is technically superfluous.
-
-#### Methods that can be overridden, but you must be sure to call the
-####    base method
-
-#### __init__(): initialization, obviously, but each init method must
-####             take an extra argument that is a dictionary of module
-####             capabilities, and it must add its own capabilities to
-####             this dictionary (see modules below for examples).
-####             The base class init stores a reference to the
-####             capability table for future lookup.
-
-#### finalize_parsing(): When parsing is complete, what you have is a
-####             bunch of key-value pairs.  This function is the place
-####             to do any processing that needs to be done (e.g.,
-####             converting strings to other types).  The base class
-####             version of the method does this for parameters that
-####             are applicable to all modules, so it must always be
-####             called if the method is overridden.
-
-#### Methods that can be overridden freely
-
-#### runmod(): function that does the module's work.  It should only
-####           be called from the runmod_wrapper() method via the
-####           run() method.  Together, these methods perform the
-####           additional bookkeeping required to ensure that modules
-####           don't try to use results before they are ready.
-
-
-#### Attributes:
-
-####  params: dictionary of parameters parsed from the config file.
-####          Generally this array should be altered only by calling
-####          the addparam method.
 
 class GcamModuleBase(object):
+    """Common base class for all of the GCAM modules (i.e., functional units).  
+    
+    We can put any utility functions that are common to all modules
+    here, but its main purpose is to provide all the multithreading
+    functionality so that the individual modules can focus
+    exclusively on doing their particular tasks.
+    
+    Methods that shouldn't be overridden:
+    
+    run(): start the module running.  The params argument should
+           be a dictionary containing the parameters the module
+           needs (probably parsed from the initial config).  Each
+           subclass should provide a method called runmod() that
+           performs the module's work; that method will be called
+           from run().  The runmod() method should return 0 on
+           successful completion.  Note that we don't make any
+           effort to limit the number of concurrent threads beyond
+           the inherent limitations imposed by data dependencies
+           between the modules.  This method returns the thread
+           object, mainly so that the driver can call join() on
+           all of the module threads. 
+           TODO: implement an active thread counter.
+
+    runmod_wrapper(): used internally by run().  Don't monkey around
+                      with this function.
+
+    fetch(): retrieve the module's results.  If the module hasn't
+             completed yet, wait to be notified of completion.  This
+             mechanism implicitly enforces correct ordering between
+             modules.  Note that we don't make any checks for
+             deadlock caused by circular dependencies.
+
+    addparam(): Add a key and value to the params array.  Generally
+                this should only be done in the config file parser.
+                
+    Methods that can be extended (but not overridden; you must be sure
+         to call the base method):
+
+    __init__(): initialization, obviously, but each init method must
+                take an extra argument that is a dictionary of module
+                capabilities, and it must add its own capabilities to
+                this dictionary (see modules below for examples).
+                The base class init stores a reference to the
+                capability table for future lookup.
+
+    finalize_parsing(): When parsing is complete, what you have is a
+                bunch of key-value pairs.  This function is the place
+                to do any processing that needs to be done (e.g.,
+                converting strings to other types).  The base class
+                version of the method does this for parameters that
+                are applicable to all modules, so it must always be
+                called if the method is overridden.
+
+    Methods that can be overridden freely
+
+    runmod(): function that does the module's work.  It should only be
+              called from the runmod_wrapper() method via the run()
+              method.  Together, these methods perform the additional
+              bookkeeping required to ensure that modules don't try to
+              use results before they are ready.
+
+    Attributes:
+
+    params: dictionary of parameters parsed from the config file.
+            Generally this array should be altered only by calling the
+            addparam method.
+
+    """
+     
     def __init__(self, cap_tbl):
+        """Initialize the GCAM module base.
+        
+        Every subclass __init__ method should call this method as its
+        first action.  The cap_tbl argument is a dictionary linking
+        capabilities (i.e., tags for identifying functional units)
+        with the modules that provide those capabilities.  Subclasses
+        should extend this method by adding their self reference to
+        the table under an appropriate tag.  E.g.:
+         
+        cap_tbl['gcam_core'] = self
+         
+        The capability table will be available as self.cap_tbl for use
+        in a subclass's methods.  Since gcam_driver passes the same
+        capacity table to each subclass instance initialization, by
+        the time a module starts running the table will contain an
+        index of all the active modules in the calculation.
+
+        """
         self.status = 0         # status indicator: 0- not yet run, 1- complete, 2- error
         self.results = {}
         self.params  = {}
@@ -89,21 +136,37 @@ class GcamModuleBase(object):
         self.condition = threading.Condition()
 
     def run(self):
-        ## TODO: have this run in a separate thread
+        """Execute the module's runmod() method in a separate thread."""
         thread = threading.Thread(target=lambda: self.runmod_wrapper())
         thread.start()
         ## returns immediately
         return thread
 
-    ## This wrapper locks the condition variable, executes the runmod
-    ## function, and unlocks when the runmod function returns.  The
-    ## way we currently have it implemented, if there is some sort of
-    ## error, we don't set the complete variable or notify waiting
-    ## threads.  This will cause a deadlock.  We should handle this
-    ## more gracefully.  This function should only ever be called from
-    ## the run() method above.  <- XXX this problem should be fixed
-    ## now, but we haven't tested the fix.
     def runmod_wrapper(self):
+        """Lock the condition variable, execute runmod(), and unlock when it returns.
+        
+        At the conclusion of the runmod() method, self.status will be
+        set to 1 if the run was successful, to 2 otherwise.  This
+        variable will be used by the fetch() method to notify clients
+        if a run failed.  Either way, threads waiting on the condition
+        variable will be released when the run completes.
+
+        At the end of this function the following will be true:
+
+        1. Either self.status==1 or self.status==2
+
+        2. If self.status==1, the self.results has a full set of
+        results in it.
+
+        This function should be called *only* by the run() method
+        above.
+
+        """
+
+        ## This block holds the lock on the condition variable for the
+        ## entire time the runmod() method is running.  That's ok for
+        ## now, but it's not ideal, and it will cause problems when we
+        ## eventually try to implement co-simulations.
         with self.condition:
             try:
                 rv = self.runmod()
@@ -122,9 +185,20 @@ class GcamModuleBase(object):
         ## end of with block:  lock on condition var released.
         
     def fetch(self):
-        ## get the results of the calculation.  These aren't returned
-        ## from run() because it will run asynchronously.  This method
-        ## waits if necessary and returns the results.
+        """Return the results of the calculation as a dictionary.
+
+        The results aren't returned from run() because it will run
+        asynchronously.  This method waits if necessary and returns
+        the results, checks whether the run was successful (indicated
+        by self.status), and if so returns the results dictionary.  If
+        the runmod() method failed, the variable will so indicate, and
+        an exception will be raised.
+
+        """
+
+        ## If the module is currently running, then the condition
+        ## variable will be locked, and we will block when the 'with'
+        ## statement tries to obtain the lock.
         with self.condition: 
             if self.status == 0:                  # module hasn't run yet.  Wait on it
                 print "\twaiting on %s\n" % self.__class__
@@ -139,11 +213,14 @@ class GcamModuleBase(object):
         return self.results
 
     def finalize_parsing(self):
-        ## process parameters that are common to all modules
-        ## (e.g. clobber).  The modules will be responsible for
-        ## processing their own special parameters.  If a module needs
-        ## to override this method, it should be sure to call the base
-        ## version too.
+        """Process parameters that are common to all modules (e.g. clobber).  
+
+        The modules will be responsible for processing their own
+        special parameters.  If a module needs to override this
+        method, it should be sure to call the base version too.
+
+        """
+        
         self.clobber = True          # default to overwriting outputs
         if "clobber" in self.params: 
             self.clobber = util.parseTFstring(self.params["clobber"])
@@ -152,29 +229,38 @@ class GcamModuleBase(object):
         return
 
     def addparam(self, key, value):
-        ## In the current design, this should be called only by the
-        ## config file parser.
-        self.params[key] = value
+        """Add a parameter key and value parsed from the config file.
 
-    def finish(self):
-        ## acquire a lock and release at the end of the block
-        with self.condition:
-            self.complete = 1
-            self.condition.notify_all()
-        ## end of with block:  lock is released
+        In the current design, this should be called only by the
+        config file parser.
+
+        """
+        
+        self.params[key] = value
 
     def runmod(self):
         raise NotImplementedError("GcamModuleBase is not a runnable class.") 
 
 
-## class to hold the general parameters.  Technically this isn't a
-## module as such; it doesn't run anything, but treating it as a
-## module allows us to parse it using the same code we use for all the
-## real modules, and having it in the capability table makes it easy
-## for any module that needs one of the global parameters to look them
-## up.
+## class to hold the general parameters.  
 class GlobalParamsModule(GcamModuleBase):
+    """Class to hold the general parameters for the calculation.
+
+    Technically this isn't a module as such; it doesn't run anything,
+    but treating it as a module allows us to parse it using the same
+    code we use for all the real modules, and having it in the
+    capability table makes it easy for any module that needs one of
+    the global parameters to look them up.
+
+    """
+    
     def __init__(self, cap_tbl):
+        """Copy parameters into results dictionary.
+
+        This function also sets the genparams attribute of the util
+        module, since it can't get them from this class directly.
+
+        """
         super(GlobalParamsModule, self).__init__(cap_tbl)
         self.results = self.params # this is a reference copy, so any entries in params will also appear in results
         print self.results
@@ -183,7 +269,6 @@ class GlobalParamsModule(GcamModuleBase):
         ## We need to allow gcamutil access to thiese parameters, since it doesn't otherwise know how to find the
         ## global params module.  
         util.genparams = self.params
-        self.complete = 1       # nothing to do, so we're always complete
         
     def runmod(self):
         return 0                # nothing to do here.
@@ -198,11 +283,43 @@ class GlobalParamsModule(GcamModuleBase):
 ## results:
 ##   dbxml   - gcam dbxml output file.  We get this from the gcam config file.    
 class GcamModule(GcamModuleBase):
+    """Provide the 'gcam-core' capability.
+
+    This module runs the GCAM core model, making them available under
+    the 'gcam-core' capability.
+
+    Parameters:
+      exe        = full path to gcam.exe
+      config     = full path to gcam configuration file
+      logconfig  = full path to gcam log configuration file
+      clobber    = flag: True = clobber old outputs, False = preserve old outputs
+    
+    Results:
+      dbxml      = gcam dbxml output file.  We get this from the gcam config.xml file.
+
+    Module dependences: none 
+
+    """
+    
     def __init__(self, cap_tbl):
+        """Add self to the capability table."""
         super(GcamModule,self).__init__(cap_tbl)
         cap_tbl["gcam-core"] = self
 
     def runmod(self):
+        """Run the GCAM core model.
+        
+        We start by checking to see that all the input files needed
+        for GCAM to run are actually available.  If any of them are
+        missing, we raise an IOError execption.  Next we parse the
+        config.xml file to find out what outputs we expect, and we
+        check to see if they are already present.  If they are, and if
+        'clobber' is not set to True, then we skip the run and return
+        the location of the existing dbxml.  Otherwise, we do the GCAM
+        run and then return the dbxml location.
+
+        """
+        
         ### Process the parameters
         exe    = self.params["exe"]
         cfg    = self.params["config"]
@@ -221,11 +338,11 @@ class GcamModule(GcamModuleBase):
         msgpfx = "GcamModule: "    # prefix for messages coming out of this module
         ## Do some basic checks:  do these files exist, etc.
         if not os.path.exists(exe):
-            raise RuntimeError(msgpfx + "File " + exe + " does not exist!")
+            raise IOError(msgpfx + "File " + exe + " does not exist!")
         if not os.path.exists(cfg):
-            raise RuntimeError(msgpfx + "File " + cfg + " does not exist!")
+            raise IOError(msgpfx + "File " + cfg + " does not exist!")
         if not os.path.exists(logcfg):
-            raise RuntimeError(msgpfx + "File " + logcfg + " does not exist!")
+            raise IOError(msgpfx + "File " + logcfg + " does not exist!")
 
         ## we also need to get the location of the dbxml output file.
         ## It's in the gcam.config file (we don't repeat it in the
@@ -281,28 +398,69 @@ class GcamModule(GcamModuleBase):
                 return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf)
 
 ## class for the hydrology code
-## params:
-##   workdir - working directory
-##       gcm - GCM outputs to use
-##  scenario - tag indicating the scenario to use.
-##     runid - tag indicating which ensemble member to use.
-##   logfile - file to direct the matlab code's output to
-## startmonth- month of year for first month in dataset. 1=Jan, 2=Feb, etc.  (OPTIONAL)            
-##
-## results: 
-##   qoutfile - runoff grid (matlab format)
-## flxoutfile - stream flow grid (matlab)
-##     cqfile - runoff grid (c format)
-##   cflxfile - stream flow grid (c format)
 
 ### This is how you run the hydrology code from the command line:
 ### matlab -nodisplay -nosplash -nodesktop -r "run_future_hydro('<gcm>','<scenario>');exit" > & outputs/pcm-a1-out.txt < /dev/null
 class HydroModule(GcamModuleBase):
+    """Provide the 'gcam-hydro' capability.
+
+    This is the future hydrology calculation.  For the historical
+    hydrology calculation, see HistoricalHydroModule.
+
+     params:
+       workdir - working directory
+      inputdir - input directory
+     outputdir - output directory 
+           gcm - GCM outputs to use
+      scenario - tag indicating the scenario to use.
+         runid - tag indicating which ensemble member to use.
+       logfile - file to direct the matlab code's output to
+     startmonth- month of year for first month in dataset. 1=Jan, 2=Feb, etc.  (OPTIONAL) 
+    init-storage-file - Location of the file containing initial channel storage. Not
+                        required (and ignored) if HistoricalHydroModule is present
+    
+     results: 
+       qoutfile - runoff grid (matlab format)
+       foutfile - stream flow grid (matlab)
+         cqfile - runoff grid (c format)
+       cflxfile - stream flow grid (c format)
+     basinqfile - basin level runoff (matlab format)
+    cbasinqfile - basin level runoff (c format)
+      basinqtbl - basin level output (csv format)
+       rgnqfile - region level runoff (matlab format)
+      crgnqfile - region level runoff (c format)
+        rgnqtbl - region level runoff (csv format)
+     petoutfile - PET grid (matlab format)
+
+    Module dependences: HistoricalHydroModule (optional)
+
+    """
     def __init__(self, cap_tbl):
+        """Add self to the capability table."""
         super(HydroModule, self).__init__(cap_tbl)
         cap_tbl["gcam-hydro"] = self
 
     def runmod(self):
+        """Run the future hydrology module.
+
+        This module identifies the correct input files using the gcm,
+        scenario, and runid tags and checks to see if those files are
+        present.  If not, then it throws an IOError exception.  If the
+        inputs are present, then it calculates the expected outputs
+        and checks to see if they are present.  If they are, then
+        uless the 'clobber' parameter is set, the calculation is
+        skipped.  Otherwise the hydrology calculation is run on the
+        future dataset.  The return value is 0 for successful
+        completion, 1 otherwise.
+
+        The future hydrology calculation expects an input file with
+        the initial channel water storage.  If the historical
+        hydrology model is in use, then the initial channel storage
+        will be taken from those results.  Otherwise, the initial
+        channel flow values must be taken from the file supplied as
+        the 'init-storage-file' parameter.
+
+        """
         workdir  = self.params["workdir"]
         inputdir = self.params["inputdir"] # input data from GCM
         outputdir = self.params["outputdir"] # destination for output files
@@ -342,11 +500,11 @@ class HydroModule(GcamModuleBase):
     
         msgpfx = "HydroModule:  "
         if not os.path.exists(prefile):
-            raise RuntimeError(msgpfx + "missing input file: " + prefile)
+            raise IOError(msgpfx + "missing input file: " + prefile)
         if not os.path.exists(tempfile):
-            raise RuntimeError(msgpfx + "missing input file: " + tempfile)
+            raise IOError(msgpfx + "missing input file: " + tempfile)
         if not os.path.exists(dtrfile):
-            raise RuntimeError(msgpfx + "missing input file: " + dtrfile)
+            raise IOError(msgpfx + "missing input file: " + dtrfile)
 
         ## filename bases
         qoutbase = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid
@@ -425,27 +583,47 @@ class HydroModule(GcamModuleBase):
     ## end of runmod()
 
 
-## class for historical hydrology run.  This is similar to, but not
-## quite the same as, the main hydro module.
-## params:
-## workdir  - working directory for the matlab runs
-## inputdir - location of the input files    
-##  gcm     - Which GCM to use (each has its own historical data)
-## runid    - Tag indicating the run-id (e.g.  r1i1p1_195001_200512 )
-## outputdir- Destination directory for output    
-## logfile  - file to redirect matlab output to
-## startmonth- month of year for first month in dataset (OPTIONAL)
-##
-## results:
-##   qoutfile - runoff grid (matlab format)
-## flxoutfile - stream flow grid (matlab format)
-## chstorfile - channel storage grid (matlab format)
 class HistoricalHydroModule(GcamModuleBase):
+    """Class for historical hydrology run.  
+
+    This is similar to, but not quite the same as, the main hydro module.
+    params:
+       workdir  - working directory for the matlab runs
+       inputdir - location of the input files    
+        gcm     - Which GCM to use (each has its own historical data)
+       runid    - Tag indicating the run-id (e.g.  r1i1p1_195001_200512 )
+       outputdir- Destination directory for output    
+       logfile  - file to redirect matlab output to
+      startmonth- month of year for first month in dataset (OPTIONAL)
+    
+    results:
+         qoutfile - runoff grid (matlab format)
+         foutfile - stream flow grid (matlab format)
+       chstorfile - channel storage grid (matlab format)
+        basinqtbl - file for basin level runoff (csv format)
+          rgnqtbl - file for region level runoff (csv format)
+       petoutfile - file for PET output (matlab format)
+
+    module dependences:  none
+
+    """
     def __init__(self, cap_tbl):
+        """Add 'historical-hydro' capability to cap_tbl"""
         super(HistoricalHydroModule, self).__init__(cap_tbl)
         cap_tbl['historical-hydro'] = self
 
     def runmod(self):
+        """Run the historical hydrology code.
+        
+        Before running, the module tests for the existence of the
+        input files, and throws an exception (IOError) if any are
+        missing.  It also tests for the expected output files, and if
+        they are all present and 'clobber' is not set, it skips the
+        run.  Either way, the results dictionary contains the names of
+        the output files.  Return value is 0 for success, 1 for
+        failure.
+
+        """
         workdir   = self.params['workdir']
         inputdir  = self.params['inputdir'] 
         outputdir = self.params['outputdir']
@@ -475,11 +653,11 @@ class HistoricalHydroModule(GcamModuleBase):
 
         msgpfx = "HistoricalHydroModule:  "
         if not os.path.exists(prefile):
-            raise RuntimeError(msgpfx + "missing input file: " + prefile)
+            raise IOError(msgpfx + "missing input file: " + prefile)
         if not os.path.exists(tempfile):
-            raise RuntimeError(msgpfx + "missing input file: " + tempfile)
+            raise IOError(msgpfx + "missing input file: " + tempfile)
         if not os.path.exists(dtrfile):
-            raise RuntimeError(msgpfx + "missing input file: " + dtrfile)
+            raise IOError(msgpfx + "missing input file: " + dtrfile)
 
         ## output filenames
         qoutfile      = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
@@ -522,26 +700,51 @@ class HistoricalHydroModule(GcamModuleBase):
             stderr.write('[HistoricalHydroModule]: Some output files were not created.  Check logfile (%s) for details.\n'%logfile)
             return 1            # nonzero indicates failure
     
-## class for the water disaggregation code
-## params
-##    workdir  - working directory
-##  outputdir  - directory for outputs
-##   inputdir  - directory for static inputs
-##   scenario  - scenario tag
-##     rgnmap  - region mapping file
-##
-## results:  c-style binary files for each of the following variables
-##           (the key is the variable name; the value is the filename):
-##           "wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmanuf", "wdmining", "wsi"
-        
 ### This is how you run the disaggregation code
 ### matlab -nodisplay -nosplash -nodesktop -r "run_disaggregation('<runoff-file>', '<chflow-file>', '<gcam-filestem>');exit" >& <logfile> < /dev/null
 class WaterDisaggregationModule(GcamModuleBase):
+    """Class for the water demand disaggregation calculation
+
+    params:
+       workdir  - working directory
+      inputdir  - directory for static inputs
+     outputdir  - directory for outputs
+       tempdir  - directory for intermediate files (results of GCAM queries)
+       logfile  - File to redirect matlab output into.
+      scenario  - scenario tag
+        rgnmap  - region mapping file (OPTIONAL - default is old 14-region mapping)
+    water-transfer - Flag indicating whether water transfer projects should be 
+                     added in post processing (OPTIONAL - default = False)
+    transfer-file  - Location of the file describing the water transfers.  Required
+                     if water-transfer == True, ignored otherwise.
+    
+    results:  c-style binary files for each of the following variables
+              (the key is the variable name; the value is the filename):
+              "wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmanuf", "wdmining", "wsi"
+
+    Module dependences:  GcamModule, HydroModule
+
+    TODO: Allow config to specify a GCAM dbxml file directly, instead
+          of having to go through the GcamModule, even when we know
+          the result is precalculated.
+
+    """
     def __init__(self, cap_tbl):
         super(WaterDisaggregationModule, self).__init__(cap_tbl)
         cap_tbl["water-disaggregation"] = self
 
     def runmod(self):
+        """Run the water demand disaggregation calculation.
+        
+        Does some simple consistency checking on the input parameters,
+        and returns a failure code if errors are found.  Then checks
+        to see if expected outputs already exist.  If so, the
+        calculation is skipped (unless 'clobber' is set), and the
+        existing results are added to the results dictionary.
+        Otherwise, the disaggregation calculation is run, and the new
+        results are added to the results dictionary.
+
+        """
         import gcam.water.waterdisag
 
         workdir  = self.params["workdir"]
@@ -673,19 +876,26 @@ class WaterDisaggregationModule(GcamModuleBase):
     ## end of runmod
         
 ## class for the netcdf-demo builder
-## params:
-##   mat2nc  - location of the netcdf converter executable
-##     dsid  - dataset id
-##  forcing  - forcing value (written into the output data as metadata)
-## globalpop - 2050 global population (written into output data as metadata)
-##    pcGDP  - 2050 per-capita GDP (written into output data as metadata -- currently not used anyhow)
-## outputdir - output directory
 class NetcdfDemoModule(GcamModuleBase):
+    """Module to build NetCDF output for the February 2015 demo.
+
+    params:
+      mat2nc  - location of the netcdf converter executable
+        dsid  - dataset id
+     forcing  - forcing value (written into the output data as metadata)
+    globalpop - 2050 global population (written into output data as metadata)
+       pcGDP  - 2050 per-capita GDP (written into output data as metadata -- currently not used anyhow)
+    outputdir - output directory
+
+    Module dependences:  HydroModule, WaterDisaggregationModule
+
+    """
     def __init__(self, cap_tbl):
         super(NetcdfDemoModule, self).__init__(cap_tbl)
         cap_tbl['netcdf-demo'] = self
 
     def runmod(self):
+        """Create NetCDF file from HydroModule and WaterDisaggregationModule results."""
         hydro_rslts = self.cap_tbl['gcam-hydro'].fetch()
         water_rslts = self.cap_tbl['water-disaggregation'].fetch()
 

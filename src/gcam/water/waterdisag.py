@@ -1,4 +1,7 @@
 #!/bin/env python
+"""Functions supporting the water demand disaggregation module."""
+
+
 from gcam import util
 import re
 
@@ -7,11 +10,6 @@ regions_ordered = ["USA", "Canada", "Western Europe", "Japan", "Australia_NZ",
                    "Former Soviet Union", "China", "Middle East", "Africa",
                    "Latin America", "Southeast Asia", "Eastern Europe",
                    "Korea", "India"]
-
-## For some reason I gave out a different order for the demo data
-# regions_demo = ['Africa', 'Australia_NZ', 'Canada', 'China', 'Eastern Europe',
-#                 'Former Soviet Union', 'India', 'Japan', 'Korea', 'Latin America',
-#                 'Middle East', 'Southeast Asia', 'USA', 'Western Europe',]
 
 ## Year-2000 population benchmarks
 gis2000 = {"Africa" : 813123731,
@@ -29,11 +27,17 @@ gis2000 = {"Africa" : 813123731,
            "USA" : 282494918,
            "Western Europe" : 448082681}
 
-## Read the data from a csv file generated as gcam output.  Only some
-## GCAM tables have this format.  Right now the ones that do include
-## population and non-ag water withdrawals
-## njunk is the number of junk columns after the region column
 def rd_gcam_table(filename, njunk=0):
+    """Read the data from a csv file generated as gcam output.  
+
+    Only some GCAM tables have this format.  Right now the ones that
+    do include population and non-ag water withdrawals.
+
+    arguments:
+       filename - The csv file to be read. 
+          njunk - Number of junk columns after the region column to be skipped.
+
+    """
     table = {}
     with open(filename,"r") as file:
         ## skip first two lines, which are headers
@@ -59,6 +63,21 @@ def rd_gcam_table(filename, njunk=0):
             
 ## reorder the table output and write it to a file.  
 def table_output_ordered(filename, table, incl_region=False, ordering=regions_ordered):
+    """Reorder an output table by region and write to a file.
+
+    arguments:
+         filename - Name of intended output file.
+
+            table - Output table to reorder (e.g. output of proc_wdnonag)
+
+      incl_region - Flag: True = output region names in first columns;
+                    False = don't.  Default: False
+
+         ordering - List of regions in the order that they should be
+                    output.  Default = canonical ordering given in
+                    'regions_ordered'.
+
+    """
     with open(filename,"w") as file:
         for region in ordering:
             if incl_region:
@@ -68,14 +87,38 @@ def table_output_ordered(filename, table, incl_region=False, ordering=regions_or
     return
 
     
-## process the non-ag water demand.  Return the table so that we can compute
-## the aggregated water demand
 def proc_wdnonag(infile, outfile):
+    """Process the non-agricultural water demands.
+
+    Take the table of non-agricultural water demands output by GCAM,
+    transform it to the format expected by the water demand
+    disaggregation, and write to an output file.
+
+    arguments:
+       infile - Name of the input file.
+      outfile - Name of the output file.
+
+    return value: The transformed table, to be used in computing total
+                  water demand.
+
+    """
     table = rd_gcam_table(infile,2)
     table_output_ordered(outfile, table)
     return table
 
 def proc_wdnonag_total(outfile, wddom, wdelec, wdmanuf, wdmining):
+    """Sum the non-agricultural water demands to get total non-ag demand.
+
+    arguments:
+        outfile - Name of output file
+          wddom - Domestic water demand table
+         wdelec - Electric generation water demand table
+        wdmanuf - Manufacturing water demand table
+       wdmining - Mining water demand table
+
+    return value: Total non-ag water demand table.
+
+    """
     wdnonag = {}
     for region in regions_ordered:
         dom    = map(float, wddom[region].split(','))
@@ -88,7 +131,18 @@ def proc_wdnonag_total(outfile, wddom, wdelec, wdmanuf, wdmining):
     table_output_ordered(outfile, wdnonag)
     return wdnonag 
     
-def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo): 
+def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo):
+    """Process GCAM population output.
+
+    arguments:
+          infile - Input data file.
+     outfile_fac - Output file for the "pop_fac" table
+     outfile_tot - Output file for the "pop_tot" table 
+    outfile_demo - Output file for the reordered version of the
+                   "pop_tot" table. (TODO: This output is probably
+                   obsolete.)
+
+    """
     poptbl = rd_gcam_table(infile,1)
     pop_fac = {}
     pop_tot = {}
@@ -106,28 +160,9 @@ def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo):
     table_output_ordered(outfile_tot, pop_tot)
     table_output_ordered(outfile_demo, pop_tot) # demo output now uses the normal ordering.
 
-    return (pop_fac, pop_tot)
+    return (pop_fac, pop_tot) 
 
 
-
-
-
-## read and process a table of GCAM livestock water withdrawals
-## we start with a table that looks like so: 
-##        scenario, region, input, sector, 1990, 2005, 2010, ... , units
-## Region and sector are our keys, the year columns are our data, and
-## scenario, input, and units are junk
-
-## We want a series of tables, one for each animal type, with the form:
-##        region, 1990, 2005, ... , 2095
-## The animal types are buffalo, cattle, goat, sheep, poultry, and pig.
-## Unfortunately, the sectors don't map neatly onto the animals.  The
-## sectors are: Beef, Dairy, Pork, Poultry, and SheepGoat.  Beef and dairy
-## are summed together and apportioned between buffalo and cattle.
-## SheepGoat are apportioned between sheep and goats, and Poultry and Pork
-## map onto poultry and pig, respectively.  The coefficients for
-## apportioning the Beef/Dairy and SheepGoat sectors are given by region
-## in the tables below:
 
 ## table giving the fraction of beef that is buffalo (vs. cattle), by region
 bfracFAO2005 = {
@@ -166,6 +201,29 @@ gfracFAO2005 = {
 }
 
 def proc_wdlivestock(infilename, outfilename, rgnTotalFilename):
+    """Read and process a table of GCAM livestock water demands.
+
+    We start with a table that looks like so: 
+           scenario, region, input, sector, 1990, 2005, 2010, ... , units
+
+    Region and sector are our keys, the year columns are our data, and
+    scenario, input, and units are junk
+    
+    We want a series of tables, one for each animal type, with the form:
+           region, 1990, 2005, ... , 2095
+
+    The animal types are buffalo, cattle, goat, sheep, poultry, and
+    pig.  Unfortunately, the sectors don't map neatly onto the
+    animals.  The sectors are: Beef, Dairy, Pork, Poultry, and
+    SheepGoat.  Beef and dairy are summed together and apportioned
+    between buffalo and cattle.  SheepGoat are apportioned between
+    sheep and goats, and Poultry and Pork map onto poultry and pig,
+    respectively.  The coefficients for apportioning the Beef/Dairy
+    and SheepGoat sectors are given by region in the tables in
+    waterdisag.py.  These are determined from base year data and are
+    assumed to be fixed over time.
+
+    """
     wdliv_table = {}
     with open(infilename,"r") as infile:
         ## First read all of the lines in the file
@@ -224,11 +282,26 @@ def proc_wdlivestock(infilename, outfilename, rgnTotalFilename):
     ## return the master table, in case we want to do something else with it
     return wdliv_table
 
-## write a table of numeric (not string) values by region as CSV data
-## to an open file.  If given a file handle, write the data and do not
-## close the file.  If given a string, open the file, write the data,
-## and close
 def wtbl_numeric(outfilein, table):
+    """write a table of numeric values by region to a file as CSV data.
+
+    arguments: 
+        outfilein - Either a file handle for an open file, or a
+                    string.  If a file handle is passed, then write
+                    the data and leave the file open.  If a string is
+                    passed, open the file under that name, write the
+                    data, and close the file.
+
+            table - Data to write.  This data must be numeric, not
+                    string data.  The table should be organized by
+                    region.  Thus, table[region] should be a list of
+                    numeric values.
+    
+    to an open file.  If given a file handle, write the data and do not
+    close the file.  If given a string, open the file, write the data,
+    and close
+
+    """
     if hasattr(outfilein,"write"):
         outfile = outfilein
         closeit = False
@@ -257,9 +330,21 @@ croplist = ["Corn", "biomass", "FiberCrop", "MiscCrop", "OilCrop", "OtherGrain",
 ## some crops are to be treated as generic "biomass"
 biomasslist = ["eucalyptus", "Jatropha", "miscanthus", "willow", "biomassOil"]
 
-## read the irrigation share table.  The table format is:
-##   region(#), aez, crop(#), 1990, 2005, 2010, ..., 2095, region(text), crop(text)
 def proc_irr_share(infilename, outfile):
+    """Read the irrigation share table.  
+
+    The table format is:
+      region(#), aez, crop(#), 1990, 2005, 2010, ..., 2095, region(text), crop(text)
+
+    The table will be initialized with zeros for all known crops and
+    aezs, so any combination not contained in the table will default
+    to 0.
+
+    arguments:
+       infilename - name of input file
+          outfile - name of output file
+
+    """
     ## initialize table with zeros.  Any combination not contained in
     ## the table will default to 0.
     print 'irr share infile: %s' % infilename
@@ -300,13 +385,19 @@ def proc_irr_share(infilename, outfile):
             
 ## end of irrigation share reader
 
-## read in the agricultural area data, reformat, and write out
-## file format is:
-##   scenario, region, land-allocation (==crop+aez), 1990, 2005, 2010, ..., 2095, units
-## The output we want is:
-##   region-number, aez-number, crop-number, 1990, 2005, 2010, ..., 2095
 lasplit = re.compile(r'([a-zA-Z_]+)AEZ([0-9]+)')
 def proc_ag_area(infilename, outfilename):
+    """read in the agricultural area data, reformat, and write out
+
+    The file format is:
+      scenario, region, land-allocation (==crop+aez), 1990, 2005, 2010, ..., 2095, units
+    The output we want is:
+      region-number, aez-number, crop-number, 1990, 2005, 2010, ..., 2095
+
+    The arguments are the input file name and output file name,
+    respectively.
+
+    """
     with open(outfilename,"w") as outfile:
         with open(infilename,"r") as infile:
             ## 2 header lines to discard
@@ -344,16 +435,21 @@ def proc_ag_area(infilename, outfilename):
                 ## don't sort by region.
                 outfile.write(','.join(map(str,data)))
                 outfile.write('\n')
-## done with rd_ag_area
+## done with proc_ag_area
 
-## read in volume of water used by agriculture, reformat, and write
-## out.  This one is similar to the previous one, but just different
-## enough that we can't reuse the same function.
-## The input format is:
-##    scenario, region (text), crop (text), input, sector (crop+AEZ), 1990, 2005, 2010, ..., 2095, units
-## Output format is:
-##   region-number, aez-number, crop-number, 1990, 2005, 2010, ..., 2095
 def proc_ag_vol(infilename, outfilename):
+    """Read in volume of water used by agriculture, reformat, and write out.  
+
+    This function is similar to the previous one, but just different
+    enough that we can't reuse the same function.  The input format
+    is: 
+       scenario, region (text), crop (text), input, sector (crop+AEZ), 1990, 2005, 2010, ..., 2095, units
+    The output format is:
+      region-number, aez-number, crop-number, 1990, 2005, 2010, ..., 2095
+
+    The arguments are the input and output filenames.
+
+    """
     with open(outfilename,"w") as outfile:
         with open(infilename,"r") as infile:
             ## 2 header lines to discard

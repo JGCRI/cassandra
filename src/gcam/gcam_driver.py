@@ -1,10 +1,16 @@
 #!/bin/env python
+"""GCAM driver
+
+  usage:  gcam_driver.py <configfile>
+
+""" 
+
 import re
 import threading
 
-## usage: gcam_driver.py <configfile>
-
 def gcam_parse(cfgfile_name):
+    """Parse the configuraiton file for the GCAM driver."""
+
     ## initialize the structures that will receive the data we are
     ## parsing from the file
     capability_table = {}
