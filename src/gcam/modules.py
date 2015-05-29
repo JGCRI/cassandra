@@ -252,6 +252,28 @@ class GlobalParamsModule(GcamModuleBase):
     capability table makes it easy for any module that needs one of
     the global parameters to look them up.
 
+    Parameters:
+
+    ModelInterface - Location of the jar file for the ModelInterface
+                     code, used to query GCAM outputs.
+
+       DBXMLlib - Location of the DBXML libraries used by the
+                  ModelInterface code.
+
+       inputdir - Directory containing general input files.  (OPTIONAL
+                  - default is './input-data').  Relative paths will
+                  be interpreted relative to the working directory
+                  (even if they don't begin with './')
+
+      rgnconfig - Directory containing region configuration files.
+                  Any data that changes with the the region mapping
+                  should be in this directory.  The directory will be
+                  converted to an absolute path if it does not start
+                  with '/'.  If it starts with './' the path will be
+                  relative to the directory the driver code is running
+                  in; otherwise, it will be relative to inputdir.
+                  (OPTIONAL - default is 'rgn14')
+
     """
     
     def __init__(self, cap_tbl):
@@ -262,15 +284,36 @@ class GlobalParamsModule(GcamModuleBase):
 
         """
         super(GlobalParamsModule, self).__init__(cap_tbl)
-        self.results = self.params # this is a reference copy, so any entries in params will also appear in results
+
+        self.results = self.params # this is a reference copy, so any entries added to
+                                   # params will also appear in results. 
+
+        print 'General parameters as input:'
         print self.results
         cap_tbl["general"] = self
 
-        ## We need to allow gcamutil access to thiese parameters, since it doesn't otherwise know how to find the
+        ## We need to allow gcamutil access to these parameters, since it doesn't otherwise know how to find the
         ## global params module.  
-        util.genparams = self.params
+        util.global_params = self
         
     def runmod(self):
+        """Set the default value for the optional parameters, and convert filenames to absolute paths."""
+        self.results['ModelInterface'] = util.abspath(self.results['ModelInterface'])
+        self.results['DBXMLlib'] = util.abspath(self.results['DBXMLlib'])
+
+        if self.results.has_key('inputdir'):
+            inputdir = self.results['inputdir']
+        else:
+            inputdir = './input-data'
+        self.results['inputdir'] = util.abspath(inputdir,os.getcwd())
+        
+        if self.results.has_key('rgnconfig'):
+            rgnconfig = self.results['rgnconfig']
+        else:
+            stdout.write('[GlobalParamsModule]: Using default region mapping (14 region)')
+            rgnconfig = 'rgn14'
+        self.results['rgnconfig'] = util.abspath(rgnconfig,self.results['inputdir'])
+
         return 0                # nothing to do here.
 
     
@@ -461,6 +504,7 @@ class HydroModule(GcamModuleBase):
         the 'init-storage-file' parameter.
 
         """
+        
         workdir  = self.params["workdir"]
         inputdir = self.params["inputdir"] # input data from GCM
         outputdir = self.params["outputdir"] # destination for output files
@@ -555,6 +599,10 @@ class HydroModule(GcamModuleBase):
             self.results["changed"] = 0 # mark cached results as clean
             return 0        # success code
 
+        ## Get the location of the region mapping file.
+        genparams = self.cap_tbl['general'].fetch()
+        gridrgn   = util.abspath('newgrd_GCAM.csv',genparams['rgnconfig'])
+        
         ## Run the matlab code.
         ## TODO: eventually we need to move away from matlab, as it is not a
         ##       suitable batch language.  Notably, if it encounters an error
@@ -570,8 +618,8 @@ class HydroModule(GcamModuleBase):
         print 'Running the matlab hydrology code'
         with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_future_hydro('%s','%s','%s','%s', %d, '%s','%s','%s', '%s','%s');exit" %
-                       (prefile,tempfile,dtrfile,initstorage, startmonth, qoutfile,foutfile,petoutfile, basinqfile,rgnqfile)]
+                       "run_future_hydro('%s','%s','%s','%s','%s', %d, '%s','%s','%s', '%s','%s');exit" %
+                       (prefile,tempfile,dtrfile,initstorage,gridrgn, startmonth, qoutfile,foutfile,petoutfile, basinqfile,rgnqfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
             rc = sp.wait()
         ## matlab often won't return an error code when it fails, so check to see that all files were created
@@ -683,14 +731,21 @@ class HistoricalHydroModule(GcamModuleBase):
             self.results['changed'] = 0
             return 0        # success code
 
+
+        ## Get the location of the region mapping file.
+        genparams = self.cap_tbl['general'].fetch()
+        gridrgn   = util.abspath('newgrd_GCAM.csv',genparams['rgnconfig'],'HistoricalHydroModule')
+        print '[HistoricalHydroModule]: gridrgn = %s ' % gridrgn
+        print '[HistoricalHydroModule]: rgnconfig = %s ' % genparams['rgnconfig']
+        
         ## If we get here, then we need to run the historical
         ## hydrology.  Same comments apply as to the regular hydrology
         ## module.
         print 'Running historical hydrology for gcm= %s   runid= %s' % (gcm, runid)
         with open(logfile,'w') as logdata, open('/dev/null','r') as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_historical_hydro('%s', '%s', '%s', %d, '%s', '%s','%s', '%s', '%s', '%s');exit" %
-                       (prefile, tempfile, dtrfile, 1, chstorfile, qoutfile, foutfile,petoutfile, basinqtblfile, rgnqtblfile)]
+                       "run_historical_hydro('%s', '%s', '%s', '%s', %d, '%s', '%s','%s', '%s', '%s', '%s');exit" %
+                       (prefile, tempfile, dtrfile, gridrgn, 1, chstorfile, qoutfile, foutfile,petoutfile, basinqtblfile, rgnqtblfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
             rc = sp.wait()
         ## check to see if the outputs were actually created; matlab will sometimes fail silently
@@ -705,22 +760,46 @@ class HistoricalHydroModule(GcamModuleBase):
 class WaterDisaggregationModule(GcamModuleBase):
     """Class for the water demand disaggregation calculation
 
+    This module makes use of the GCAMhydro code (which currently
+    includes the water disaggregation code). That code lives in its
+    own repository and must be installed independently.  Some input
+    files for this module will live in the GCAMhydro input directory,
+    while others will live in the gcam-driver inputs.  Mostly, things
+    that GCAMhydro knows about go in the GCAMhydro directories, while
+    other stuff goes in our directories.  One major exception is all
+    of the region-related data (including the grid-to-region mapping.
+    That data is in the driver repository (by default - it can be
+    changed) so that we can keep the region mapping consistent between
+    modules.
+
     params:
-       workdir  - working directory
-      inputdir  - directory for static inputs
+       workdir  - working directory (location of GCAMhydro code)
+
      outputdir  - directory for outputs
+
        tempdir  - directory for intermediate files (results of GCAM queries)
+
        logfile  - File to redirect matlab output into.
+
       scenario  - scenario tag
-        rgnmap  - region mapping file (OPTIONAL - default is old 14-region mapping)
-    water-transfer - Flag indicating whether water transfer projects should be 
-                     added in post processing (OPTIONAL - default = False)
-    transfer-file  - Location of the file describing the water transfers.  Required
-                     if water-transfer == True, ignored otherwise.
+
+          inputdir - directory for static inputs.  (OPTIONAL - default =
+                     inputdir from GlobalParamsModule)
+
+    water-transfer - Flag indicating whether water transfer projects
+                     should be added in post processing (OPTIONAL -
+                     default = False)
+
+    transfer-file - Location of the file describing the water
+                     transfers.  Required if water-transfer == True,
+                     ignored otherwise.  Location for relative paths
+                     is workdir (so 'inputs/water-transfer.csv' will
+                     put it in the inputs directory for GCAMhydro)
     
-    results:  c-style binary files for each of the following variables
-              (the key is the variable name; the value is the filename):
-              "wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmanuf", "wdmining", "wsi"
+    results: c-style binary files for each of the following variables
+              (the key is the variable name; the value is the
+              filename): "wdtotal", "wddom", "wdelec", "wdirr",
+              "wdliv", "wdmanuf", "wdmining", "wsi"
 
     Module dependences:  GcamModule, HydroModule
 
@@ -745,13 +824,14 @@ class WaterDisaggregationModule(GcamModuleBase):
         results are added to the results dictionary.
 
         """
-        import gcam.water.waterdisag
+        import gcam.water.waterdisag as waterdisag
 
         workdir  = self.params["workdir"]
         os.chdir(workdir)
 
         hydro_rslts = self.cap_tbl["gcam-hydro"].fetch() # hydrology module
         gcam_rslts  = self.cap_tbl["gcam-core"].fetch() # gcam core module
+        genparams   = self.cap_tbl['general'].fetch()   # general parameters
 
         runoff_file   = hydro_rslts["qoutfile"]
         chflow_file   = hydro_rslts["foutfile"]
@@ -759,21 +839,28 @@ class WaterDisaggregationModule(GcamModuleBase):
         rgnqfile      = hydro_rslts["rgnqfile"]
         runid         = hydro_rslts["runid"]
         dbxmlfile     = gcam_rslts["dbxml"]
-        #dbxmlfile     = "/lustre/data/rpl/gcam-water/SSP_Scen0.dbxml"
         outputdir     = self.params["outputdir"]
         tempdir       = self.params["tempdir"]  # location for intermediate files produced by dbxml queries
-        inputdir      = self.params["inputdir"] # static inputs, such as irrigation share and query files.
         scenariotag   = self.params["scenario"]
-        if self.params.has_key('rgnmap'):
-            rgnmap = self.params['rgnmap']
+
+        rgnconfig = genparams['rgnconfig']
+
+        if self.params.has_key('inputdir'):
+            inputdir = self.params['inputdir'] # static inputs, such as irrigation share and query files.
         else:
-            stdout.write('[WaterDisaggregationModule]: using default region mapping.')
-            rgnmap = 'inputs/newgrd_GCAM.csv'
+            inputdir = genparams['inputdir']
+        print '[WaterDisaggregationModule]: inputdir = %s' % inputdir
+
+        ## The mapping between grid cells and regions is fixed by the
+        ## choice of region map directory.  This is so that all
+        ## modules will see a consistent view of the region mapping.
+        gridrgn = util.abspath('newgrd_GCAM.csv',rgnconfig)
+        
         ## Parse the water transfer parameters.
         if self.params.has_key('water-transfer'):
             transfer      = util.parseTFstring(self.params['water-transfer'])
             try:
-                transfer_file = self.params['transfer-file']
+                transfer_file = util.abspath(self.params['transfer-file'], workdir)
             except KeyError:
                 stderr.write('Water transfer set, but no transfer data file specified.\n')
                 return 5
@@ -788,6 +875,9 @@ class WaterDisaggregationModule(GcamModuleBase):
         else:
             scenariotag = scenariotag + 'wF' 
         print 'scenariotag = %s' % scenariotag
+
+        ## Initialize the waterdisag module
+        waterdisag.init_rgn_tables(rgnconfig)
 
         ## Helper function generator
         def get_dir_prepender(dir):
@@ -864,7 +954,7 @@ class WaterDisaggregationModule(GcamModuleBase):
             tflag = 1
         else:
             tflag = 0
-        matlabfn = "run_disaggregation('%s','%s','%s','%s', '%s', '%s','%s','%s', '%s', %s, '%s');" % (runoff_file, chflow_file,basinqfile,rgnqfile,  rgnmap, tempdir, outputdir, scenariotag,runid, tflag, transfer_file)
+        matlabfn = "run_disaggregation('%s','%s','%s','%s', '%s', '%s','%s','%s', '%s', %s, '%s');" % (runoff_file, chflow_file,basinqfile,rgnqfile,  gridrgn, tempdir, outputdir, scenariotag,runid, tflag, transfer_file)
         print 'current dir: %s ' % os.getcwd()
         print 'matlab fn:  %s' % matlabfn
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:
@@ -908,7 +998,7 @@ class NetcdfDemoModule(GcamModuleBase):
         pop = self.params['pop']
         gdp = self.params['gdp']
         outfile = self.params['outfile']
-        mat2nc  = self.params['mat2nc']
+        mat2nc  = util.abspath(self.params['mat2nc'],os.getcwd())
         
         self.results['outfile'] = outfile
         

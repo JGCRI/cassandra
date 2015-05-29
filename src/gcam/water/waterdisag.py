@@ -6,27 +6,47 @@ from gcam import util
 import re
 
 ## Canonical ordering of the regions for outputs
-regions_ordered = ["USA", "Canada", "Western Europe", "Japan", "Australia_NZ",
-                   "Former Soviet Union", "China", "Middle East", "Africa",
-                   "Latin America", "Southeast Asia", "Eastern Europe",
-                   "Korea", "India"]
+regions_ordered = []
+## Reverse lookup table for region ordering
+rgnid = {}
 
 ## Year-2000 population benchmarks
-gis2000 = {"Africa" : 813123731,
-           "Australia_NZ" : 22603983,
-           "Canada" : 31209299,
-           "China"  : 1397857019 ,
-           "Eastern Europe" : 123917239,
-           "Former Soviet Union" : 297536224,
-           "India" : 1010329677,
-           "Japan" : 124473594,
-           "Korea" : 51010641,
-           "Latin America" : 508033627,
-           "Middle East" : 178740493,
-           "Southeast Asia" : 774664021,
-           "USA" : 282494918,
-           "Western Europe" : 448082681}
+gis2000 = {}
 
+## table giving the fraction of beef that is buffalo (vs. cattle), by region
+bfracFAO2005 = {}
+
+## table giving the fraction of SheepGoat that is goat (vs. sheep), by region
+gfracFAO2005 = {}
+
+
+
+def init_rgn_tables(rgnconfig):
+    """Read the region-specific data tables in the rgnconfig directory.
+
+    These tables are used internally for the calculations in this
+    (python) module.
+
+    """
+
+    global gis2000
+    global bfracFAO2005
+    global gfracFAO2005
+    global regions_ordered
+    
+    (rgnid, regions_ordered) = util.rd_rgn_table('%s/RgnNames.txt'%rgnconfig)
+    (gis2000, _) = util.rd_rgn_table('%s/gis2000.csv'%rgnconfig)
+    (bfracFAO2005, _) = util.rd_rgn_table('%s/bfracFAO2005.csv'%rgnconfig)
+    (gfracFAO2005, _) = util.rd_rgn_table('%s/gfracFAO2005.csv'%rgnconfig)
+
+    from sys import stderr
+
+    stderr.write('gis2000:\n%s\n' % str(gis2000))
+    stderr.write('bfrac:\n%s\n' % str(bfracFAO2005))
+    stderr.write('gfrac:\n%s\n' % str(gfracFAO2005))
+    
+##end    
+    
 def rd_gcam_table(filename, njunk=0):
     """Read the data from a csv file generated as gcam output.  
 
@@ -38,6 +58,7 @@ def rd_gcam_table(filename, njunk=0):
           njunk - Number of junk columns after the region column to be skipped.
 
     """
+    
     table = {}
     with open(filename,"r") as file:
         ## skip first two lines, which are headers
@@ -62,7 +83,7 @@ def rd_gcam_table(filename, njunk=0):
 
             
 ## reorder the table output and write it to a file.  
-def table_output_ordered(filename, table, incl_region=False, ordering=regions_ordered):
+def table_output_ordered(filename, table, incl_region=False, ordering=None):
     """Reorder an output table by region and write to a file.
 
     arguments:
@@ -78,6 +99,10 @@ def table_output_ordered(filename, table, incl_region=False, ordering=regions_or
                     'regions_ordered'.
 
     """
+
+    if ordering is None:
+        ordering = regions_ordered
+
     with open(filename,"w") as file:
         for region in ordering:
             if incl_region:
@@ -143,11 +168,19 @@ def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo):
                    obsolete.)
 
     """
+
+    from sys import stderr
+    
     poptbl = rd_gcam_table(infile,1)
     pop_fac = {}
     pop_tot = {}
 
+    stderr.write('[proc_pop]: infile = %s\n'%infile) 
+    stderr.write('[proc_pop]: gis2000:\n%s\n' % str(gis2000))
+    stderr.write('[proc_pop]: poptbl:\n%s\n' % str(poptbl))
+    
     for region in poptbl.keys():
+        stderr.write('[proc_pop]: processing region: %s\n' % region)
         popvals   = poptbl[region].split(',')
         benchmark = gis2000[region]
         fpop      = map(lambda x: str(1000*float(x)/benchmark), popvals)
@@ -156,6 +189,9 @@ def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo):
         pop_fac[region] = ','.join(fpop)
         pop_tot[region] = ','.join(totpop)
 
+    stderr.write('[proc_pop]: popfac:\n%s\n'%str(pop_fac))
+    stderr.write('[proc_pop]: poptot:\n%s\n'%str(pop_tot))
+        
     table_output_ordered(outfile_fac, pop_fac)
     table_output_ordered(outfile_tot, pop_tot)
     table_output_ordered(outfile_demo, pop_tot) # demo output now uses the normal ordering.
@@ -164,41 +200,6 @@ def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo):
 
 
 
-## table giving the fraction of beef that is buffalo (vs. cattle), by region
-bfracFAO2005 = {
-    "USA"                 :	0,
-    "Canada"              :	0,
-    "Western Europe"      :	0.0337915515,
-    "Japan"               :	0,
-    "Australia_NZ"        :	0.0001073395,
-    "Former Soviet Union" :	0.0235449617,
-    "China"               :	0.170404984,
-    "Middle East"         :	0.0326917861,
-    "Africa"              :	0,
-    "Latin America"       :	0,
-    "Southeast Asia"      :	0.3139622207,
-    "Eastern Europe"      :	0.0410626023,
-    "Korea"               :	0,
-    "India"               :	0.3197864781
-}
-
-## table giving the fraction of SheepGoat that is goat (vs. sheep), by region
-gfracFAO2005 = {
-    "USA"                 :    0.2058911719,
-    "Canada"              :    0.0304360953,
-    "Western Europe"      :    0.1252789991,
-    "Japan"               :    0.7580543033,
-    "Australia_NZ"        :    0.0043487698,
-    "Former Soviet Union" :    0.1457585163,
-    "China"               :    0.5365833204,
-    "Middle East"         :    0.3013901891,
-    "Africa"              :    0.483539802,
-    "Latin America"       :    0.3326726631,
-    "Southeast Asia"      :    0.7552733099,
-    "Eastern Europe"      :    0.2212560354,
-    "Korea"               :    0.9982557615,
-    "India"               :    0.672427639
-}
 
 def proc_wdlivestock(infilename, outfilename, rgnTotalFilename):
     """Read and process a table of GCAM livestock water demands.

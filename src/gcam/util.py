@@ -3,6 +3,7 @@
 import os
 import os.path
 import re
+import string
 import subprocess
 import tempfile
 import random
@@ -10,10 +11,10 @@ import random
 ## utility functions used in other gcam python code
 
 ## Place holder for the general params structure.  The constructor for
-## that structure knows it's supposed to add itself here.  (This is
-## kind of ugly.  Maybe we should think up a better way to do it.)
+## that structure knows it's supposed to add itself here.  (TODO: This
+## is kind of ugly.  Maybe we should think up a better way to do it.)
 ## This variable should be considered private to this module
-genparams = None
+global_params = None
     
 
 ## Often we will have to parse values from a config file that are
@@ -24,6 +25,54 @@ def parseTFstring(val):
     falsevals = ["False", "false", "FALSE", "F", "f", "No", "NO", "N", 
                  "no", "0"]
     return val.lstrip().rstrip() not in falsevals
+
+
+def rd_rgn_table(filename,skip=1,fltconv=True):
+    """Read a csv table of regions and properties.
+
+    The region name should be in the first column.  If there are only
+    two columns, then put the result into a dictionary of values by
+    region.  If there are more than two columns, put the result into a
+    dictionary of lists of values by region.
+
+    Arguments:
+      filename - name of the file to process
+          skip - number of initial rows to skip (default = 1)
+       fltconv - flag: True = convert results to float (DEFAULT); 
+                       False = return string values
+
+    Return value: a tuple of two elements.  The first is the table
+                   described above.  The second is a list giving the
+                   original order of the regions in the file, in case
+                   it matters.
+
+    """
+
+    table = {}
+    order = []
+    with open(filename, "r") as file:
+        for sk in range(skip):
+            file.readline()
+
+        for line in file:
+            line = rm_trailing_comma(line)
+            toks = line.split(',')
+            rgn  = string.lstrip(string.rstrip(toks[0]))
+            data = toks[1:]
+            if fltconv:
+                data = map(float,data)
+            else:
+                # Remove leading and trailing whitespace
+                data = map(string.lstrip, data)
+                data = map(string.rstrip, data)
+            if len(data) == 1:
+                data = data[0]  # grab the lone value from the list.
+
+            order.append(rgn)
+            table[rgn] = data
+
+    return (table, order)
+    
 
 
 ## Regular expression for detecting a scenario name (private, used in scenariofix)
@@ -93,6 +142,7 @@ def gcam_query(queryfiles, dbxmlfiles, outfiles):
     if len(dbxmllist) != len(qlist) or len(outlist) != len(qlist):
         raise RuntimeError("Mismatch in input lengths for gcam_query.") 
 
+    genparams      = global_params.fetch()
     ModelInterface = genparams["ModelInterface"]
     DBXMLlib       = genparams["DBXMLlib"]
         
@@ -199,3 +249,31 @@ def allexist(files):
             allfiles = False
             break
     return allfiles
+
+def abspath(filename,defaultpath=None, tag=None):
+    """Convert a filename to an absolute path.
+
+    Names starting with '/' are returned unchanged.  Names beginning
+    with './' are assumed to be relative to the current directory.
+    All others are assumed to be relative to a supplied default.
+
+    Arguments:
+         filename - filename to convert 
+      defaultpath - default base for relative paths.  (OPTIONAL - If
+                    not given, then it is an error to specify a
+                    filename relative to the (non-existent) default
+                    path.)
+
+    """
+
+    print '[%s]: default path= %s  filename= %s' % (str(tag), str(defaultpath), str(filename))
+
+    if filename[0] == '/':
+        return filename
+    elif filename[0:2] == './':
+        return '%s/%s' % (os.getcwd(),filename[2:])
+    elif defaultpath is None:
+        raise RuntimeError('Error: generating absolute file path for %s.  No default directory for this parameter; filename must be absolute path or relative to ./'
+                               % filename)
+    else:
+        return '%s/%s' % (defaultpath,filename)
