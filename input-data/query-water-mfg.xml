@@ -1,19 +1,6 @@
 <queries>
     <aQuery>
-      <region name="USA"/> 
-      <region name="Canada"/>
-      <region name="Western Europe"/>
-      <region name="Japan"/>
-      <region name="Australia_NZ"/>
-      <region name="Former Soviet Union"/>
-      <region name="China"/>
-      <region name="Middle East"/>
-      <region name="Africa"/>
-      <region name="Latin America"/>
-      <region name="Southeast Asia"/>
-      <region name="Eastern Europe"/>
-      <region name="Korea"/>
-      <region name="India"/>
+      <all-regions/>
       <supplyDemandQuery title="Water Withdrawals (Industrial-Manufacturing)">
          <axis1 name="sector">sector</axis1>
          <axis2 name="Year">demand-physical[@vintage]</axis2>
