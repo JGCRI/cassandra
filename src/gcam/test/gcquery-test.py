@@ -1,14 +1,27 @@
+import sys
+
+## enable this code to run from the gcam/test/ directory
+sys.path.append('../..')
+
 from gcam import util
+from gcam.modules import GlobalParamsModule
 from gcam.water import waterdisag
 
-util.genparams = {"ModelInterface" : "/lustre/data/rpl/ModelInterface/ModelInterface.jar",
-                      "DBXMLlib" : "/homes/pralitp/libs/dbxml-2.5.16/install/lib"}
 
-dbxml_file = "/lustre/data/rpl/gcam-water/SSP_Scen0.dbxml"
+## Set up the global parameters module (which is used by some of the
+## utility functions).
+genparams = {"ModelInterface" : "/lustre/data/rpl/ModelInterface-baseX/ModelInterface.jar",
+             "DBXMLlib" : "/homes/pralitp/libs/dbxml-2.5.16/install/lib"} 
+global_params = GlobalParamsModule({})
+for key in genparams.keys():
+    global_params.addparam(key, genparams[key])
+global_params.run()
 
-queryfiles = ['queries/batch-land-alloc.xml', 'queries/batch-population.xml', 'queries/batch-water-ag.xml',
-              'queries/batch-water-dom.xml', 'queries/batch-water-elec.xml', 'queries/batch-water-livestock.xml',
-              'queries/batch-water-mfg.xml', 'queries/batch-water-mining.xml']
+dbfile = "/lustre/data/rpl/gcam-ifam-32rgn/database_basexdb"
+
+queryfiles = ['input-data/batch-land-alloc.xml', 'input-data/batch-population.xml', 'input-data/batch-water-ag.xml',
+              'input-data/batch-water-dom.xml', 'input-data/batch-water-elec.xml', 'input-data/batch-water-livestock.xml',
+              'input-data/batch-water-mfg.xml', 'input-data/batch-water-mining-alt.xml']
 
 
 ## add the directory path to the query files
@@ -18,9 +31,12 @@ outfiles = ['batch-land-alloc.csv', 'batch-population.csv', 'batch-water-ag.csv'
               'batch-water-dom.csv', 'batch-water-elec.csv', 'batch-water-livestock.csv',
               'batch-water-mfg.csv', 'batch-water-mining.csv']
 
-outfiles = map(lambda file: '/lustre/data/rpl/gcam-driver/output/' + file, outfiles)
+outfiles = map(lambda file: '/lustre/data/rpl/gcam-driver/output/test/' + file, outfiles)
 
-of_new = util.gcam_query(queryfiles, dbxml_file, outfiles)
+of_new = util.gcam_query(queryfiles, dbfile, outfiles)
+
+## Just test the queries, not the processing.
+raise SystemExit
 
 ## process the non-ag water
 wd_dom  = waterdisag.proc_wdnonag('output/batch-water-dom.csv', 'output/final_wd_dom.csv')
