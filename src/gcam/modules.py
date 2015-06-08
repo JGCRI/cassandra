@@ -257,8 +257,8 @@ class GlobalParamsModule(GcamModuleBase):
     ModelInterface - Location of the jar file for the ModelInterface
                      code, used to query GCAM outputs.
 
-       DBXMLlib - Location of the DBXML libraries used by the
-                  ModelInterface code.
+       DBXMLlib - Location of the DBXML libraries used by older
+                  versions of the ModelInterface code.
 
        inputdir - Directory containing general input files.  (OPTIONAL
                   - default is './input-data').  Relative paths will
@@ -317,19 +317,11 @@ class GlobalParamsModule(GcamModuleBase):
         return 0                # nothing to do here.
 
     
-## class for the module that actually runs gcam
-## params: 
-##   exe        = full path to gcam.exe
-##   config     = full path to gcam configuration file
-##   logconfig  = full path to gcam log configuration file
-##   clobber    = flag: True = clobber old outputs, False = preserve old outputs
-## results:
-##   dbxml   - gcam dbxml output file.  We get this from the gcam config file.    
 class GcamModule(GcamModuleBase):
     """Provide the 'gcam-core' capability.
 
-    This module runs the GCAM core model, making them available under
-    the 'gcam-core' capability.
+    This module runs the GCAM core model, making the location of the
+    output database available under the 'gcam-core' capability.
 
     Parameters:
       exe        = full path to gcam.exe
@@ -340,7 +332,7 @@ class GcamModule(GcamModuleBase):
     Results:
       dbxml      = gcam dbxml output file.  We get this from the gcam config.xml file.
 
-    Module dependences: none 
+    Module dependences: none
 
     """
     
@@ -808,6 +800,7 @@ class WaterDisaggregationModule(GcamModuleBase):
           the result is precalculated.
 
     """
+    
     def __init__(self, cap_tbl):
         super(WaterDisaggregationModule, self).__init__(cap_tbl)
         cap_tbl["water-disaggregation"] = self
@@ -824,15 +817,24 @@ class WaterDisaggregationModule(GcamModuleBase):
         results are added to the results dictionary.
 
         """
+        
         import gcam.water.waterdisag as waterdisag
 
         workdir  = self.params["workdir"]
         os.chdir(workdir)
 
         hydro_rslts = self.cap_tbl["gcam-hydro"].fetch() # hydrology module
-        gcam_rslts  = self.cap_tbl["gcam-core"].fetch() # gcam core module
         genparams   = self.cap_tbl['general'].fetch()   # general parameters
 
+        if self.params.has_key('dbxml'):
+            if self.cap_tbl.has_key('gcam-core'):
+                stdout.write('[WaterDisaggregationModule]: WARNING - gcam module included and dbfile specified.  Using dbfile and ignoring module.\n')
+            gcam_rslts = {'dbxml' : self.params['dbxml'],
+                          'changed' : False} 
+        else:
+            gcam_rslts = self.cap_tbl["gcam-core"].fetch() # gcam core module
+
+        
         runoff_file   = hydro_rslts["qoutfile"]
         chflow_file   = hydro_rslts["foutfile"]
         basinqfile    = hydro_rslts["basinqfile"]
@@ -915,7 +917,7 @@ class WaterDisaggregationModule(GcamModuleBase):
         
         queryfiles = ['batch-land-alloc.xml', 'batch-population.xml', 'batch-water-ag.xml',
                       'batch-water-dom.xml', 'batch-water-elec.xml', 'batch-water-livestock.xml',
-                      'batch-water-mfg.xml', 'batch-water-mining.xml']
+                      'batch-water-mfg.xml', 'batch-water-mining-alt.xml']
         outfiles   = ['batch-land-alloc.csv', 'batch-population.csv', 'batch-water-ag.csv',
                       'batch-water-dom.csv', 'batch-water-elec.csv', 'batch-water-livestock.csv',
                       'batch-water-mfg.csv', 'batch-water-mining.csv']
@@ -945,16 +947,25 @@ class WaterDisaggregationModule(GcamModuleBase):
         wdliv  = waterdisag.proc_wdlivestock(outfiles[5], tempdirprep("withd_liv.csv"), tempdirprep('rgn_tot_withd_liv.csv'))
 
         ## agricultural demands and auxiliary quantities
-        waterdisag.proc_irr_share(inputdirprep('irrigation-frac.csv'), tempdirprep("irrS.csv"))
-        waterdisag.proc_ag_area(outfiles[0], tempdirprep("irrA.csv"))
+        gcam_irr = waterdisag.proc_ag_area(outfiles[0], tempdirprep("irrA.csv"))
         waterdisag.proc_ag_vol(outfiles[2], tempdirprep("withd_irrV.csv"))
 
+        if not gcam_irr:
+            ## If GCAM didn't produce endogeneous irrigated and
+            ## rain-fed land allocations, then we need to read in some
+            ## precalculated irrigation shares.
+            waterdisag.proc_irr_share(inputdirprep('irrigation-frac.csv'), tempdirprep("irrS.csv"))
+            read_irrS = 1       # argument to matlab code
+        else:
+            read_irrS = 0
+
+        
         ## Run the disaggregation model
         if transfer:
             tflag = 1
         else:
             tflag = 0
-        matlabfn = "run_disaggregation('%s','%s','%s','%s', '%s', '%s','%s','%s', '%s', %s, '%s');" % (runoff_file, chflow_file,basinqfile,rgnqfile,  gridrgn, tempdir, outputdir, scenariotag,runid, tflag, transfer_file)
+        matlabfn = "run_disaggregation('%s','%s','%s','%s', '%s', '%s','%s','%s', '%s', %d, '%s', %d);" % (runoff_file, chflow_file,basinqfile,rgnqfile,  gridrgn, tempdir, outputdir, scenariotag,runid, tflag, transfer_file, read_irrS)
         print 'current dir: %s ' % os.getcwd()
         print 'matlab fn:  %s' % matlabfn
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:

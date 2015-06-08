@@ -4,6 +4,7 @@
 
 from gcam import util
 import re
+from sys import stderr,stdout
 
 ## Canonical ordering of the regions for outputs
 regions_ordered = []
@@ -37,14 +38,7 @@ def init_rgn_tables(rgnconfig):
     (rgnid, regions_ordered) = util.rd_rgn_table('%s/RgnNames.txt'%rgnconfig)
     (gis2000, _) = util.rd_rgn_table('%s/gis2000.csv'%rgnconfig)
     (bfracFAO2005, _) = util.rd_rgn_table('%s/bfracFAO2005.csv'%rgnconfig)
-    (gfracFAO2005, _) = util.rd_rgn_table('%s/gfracFAO2005.csv'%rgnconfig)
-
-    from sys import stderr
-
-    stderr.write('gis2000:\n%s\n' % str(gis2000))
-    stderr.write('bfrac:\n%s\n' % str(bfracFAO2005))
-    stderr.write('gfrac:\n%s\n' % str(gfracFAO2005))
-    
+    (gfracFAO2005, _) = util.rd_rgn_table('%s/gfracFAO2005.csv'%rgnconfig) 
 ##end    
     
 def rd_gcam_table(filename, njunk=0):
@@ -61,9 +55,16 @@ def rd_gcam_table(filename, njunk=0):
     
     table = {}
     with open(filename,"r") as file:
-        ## skip first two lines, which are headers
+        ## skip comment line
         file.readline()
-        file.readline()
+
+        ## check for 2100 column (which must be dropped)
+        fields = util.rm_trailing_comma(file.readline()).split(',')
+        if fields[-2]=='2100':
+            rm2100 = True
+            stdout.write('[rd_gcam_table]:  dropping 2100 column from file %s\n'%filename)
+        else:
+            rm2100 = False
 
         for line in file:
             line = util.rm_trailing_comma(line)
@@ -75,6 +76,9 @@ def rd_gcam_table(filename, njunk=0):
             # trim the final (units) column.  Note that this will also
             # trim off the newline.
             data = (linesplit[-1].rpartition(','))[0]
+            # if necessary, trim the 2100 column too.
+            if rm2100:
+                data = (data.rpartition(','))[0]
                 
             table[region] = data
 
@@ -103,15 +107,21 @@ def table_output_ordered(filename, table, incl_region=False, ordering=None):
     if ordering is None:
         ordering = regions_ordered
 
-    with open(filename,"w") as file:
-        for region in ordering:
-            if incl_region:
-                file.write("%s,%s\n" % (region, table[region]))
-            else:
-                file.write("%s\n" % table[region])
+    try: 
+        with open(filename,"w") as file:
+            for region in ordering:
+                if incl_region:
+                    file.write("%s,%s\n" % (region, table[region]))
+                else:
+                    file.write("%s\n" % table[region])
+    except KeyError as e:
+        stderr.write('[table_output_ordered]: Region not found: %s\n' % e)
+        stderr.write('[table_output_ordered]: input table keys:\n\t%s\n' % table.keys())
+        raise e
+    
     return
 
-    
+
 def proc_wdnonag(infile, outfile):
     """Process the non-agricultural water demands.
 
@@ -155,9 +165,19 @@ def proc_wdnonag_total(outfile, wddom, wdelec, wdmanuf, wdmining):
         wdnonag[region] = ','.join(map(str,tot))
     table_output_ordered(outfile, wdnonag)
     return wdnonag 
-    
+
 def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo):
     """Process GCAM population output.
+
+    The input population table has the following format:
+    rows -
+          comment line
+          header line
+          data1
+          ...
+          datan
+    columns (entries followed by a '?' are present in some versions, but not in others) -
+          scenario, region, 1990, 2005, 2010, 2015, ... , 2095, 2100(?), units
 
     arguments:
           infile - Input data file.
@@ -169,16 +189,10 @@ def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo):
 
     """
 
-    from sys import stderr
-    
-    poptbl = rd_gcam_table(infile,1)
+    poptbl = rd_gcam_table(infile,0)
     pop_fac = {}
     pop_tot = {}
 
-    stderr.write('[proc_pop]: infile = %s\n'%infile) 
-    stderr.write('[proc_pop]: gis2000:\n%s\n' % str(gis2000))
-    stderr.write('[proc_pop]: poptbl:\n%s\n' % str(poptbl))
-    
     for region in poptbl.keys():
         stderr.write('[proc_pop]: processing region: %s\n' % region)
         popvals   = poptbl[region].split(',')
@@ -189,15 +203,14 @@ def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo):
         pop_fac[region] = ','.join(fpop)
         pop_tot[region] = ','.join(totpop)
 
-    stderr.write('[proc_pop]: popfac:\n%s\n'%str(pop_fac))
-    stderr.write('[proc_pop]: poptot:\n%s\n'%str(pop_tot))
+    #stderr.write('[proc_pop]: popfac:\n%s\n'%str(pop_fac))
+    #stderr.write('[proc_pop]: poptot:\n%s\n'%str(pop_tot))
         
     table_output_ordered(outfile_fac, pop_fac)
     table_output_ordered(outfile_tot, pop_tot)
     table_output_ordered(outfile_demo, pop_tot) # demo output now uses the normal ordering.
 
     return (pop_fac, pop_tot) 
-
 
 
 
@@ -225,12 +238,24 @@ def proc_wdlivestock(infilename, outfilename, rgnTotalFilename):
     assumed to be fixed over time.
 
     """
+    
     wdliv_table = {}
     with open(infilename,"r") as infile:
         ## First read all of the lines in the file
-        ## Start by discarding header lines
+        ## Start by discarding comment line
         infile.readline()
-        infile.readline()
+
+        ## read header line to determine whether we have to discard a 2100 column
+        fields = util.rm_trailing_comma(infile.readline()).split(',')
+        stdout.write('[proc_wdlivestock]: header:  %s\n'%str(fields))
+        if fields[-2] == '2100':
+            rm2100 = True
+            nyear = len(fields) - 6
+            stdout.write('[proc_wdlivestock]: dropping 2100 column from file %s.\n' % infilename)
+        else:
+            rm2100 = False
+            nyear = len(fields) - 5
+        stdout.write('[proc_wdlivestock]: nyear= %d\n'%nyear)
 
         for line in infile:
             line = util.rm_trailing_comma(util.scenariofix(line))
@@ -241,6 +266,8 @@ def proc_wdlivestock(infilename, outfilename, rgnTotalFilename):
             # now split yearly data into fields and convert to numeric
             data = fields[4].split(',') 
             data.pop()          # discard the units field
+            if rm2100:
+                data.pop()
             
             wdliv_table[(region,sector)] = map(lambda x: float(x), data) # add to master table 
     ## end of file read
@@ -254,21 +281,49 @@ def proc_wdlivestock(infilename, outfilename, rgnTotalFilename):
     total_wd= {}
     ## loop over regions and compute the withdrawals for each livestock type
     for region in regions_ordered:
-        total_bovine    = map(lambda x,y: x+y, wdliv_table[(region,"Beef")], wdliv_table[(region,"Dairy")])
+        try:
+            wdbeef = wdliv_table[(region,'Beef')]
+        except KeyError: 
+            wdbeef = [0]*nyear  # region/livestock combinations not appearing are zero
+        try:
+            wddairy = wdliv_table[(region,'Dairy')]
+        except KeyError:
+            wddairy = [0]*nyear
+        total_bovine    = map(lambda x,y: x+y, wdbeef, wddairy)
         bfac            = bfracFAO2005[region]
         buffalo[region] = map(lambda x: bfac*x, total_bovine)
         cattle[region]  = map(lambda x: (1-bfac)*x, total_bovine)
 
-        gfac          = gfracFAO2005[region]
-        sheepgoat     = wdliv_table[(region,"SheepGoat")]
-        goat[region]  = map(lambda x: gfac*x, sheepgoat)
-        sheep[region] = map(lambda x: (1-gfac)*x, sheepgoat)
+        try:
+            gfac          = gfracFAO2005[region]
+            sheepgoat     = wdliv_table[(region,"SheepGoat")]
+            goat[region]  = map(lambda x: gfac*x, sheepgoat)
+            sheep[region] = map(lambda x: (1-gfac)*x, sheepgoat)
+        except KeyError:
+            goat[region]  = [0]*nyear
+            sheep[region] = [0]*nyear
 
-        poultry[region] = wdliv_table[(region,"Poultry")]
-        pig[region]     = wdliv_table[(region,"Pork")]
+        try:
+            poultry[region] = wdliv_table[(region,"Poultry")]
+        except KeyError:
+            poultry[region] = [0]*nyear
 
-        total_wd[region] = map(lambda tb,sh,pt,pg: tb+sh+pt+pg, total_bovine, sheepgoat, poultry[region], pig[region])
-    ## end of loop over regions
+        try:
+            pig[region]     = wdliv_table[(region,"Pork")]
+        except KeyError:
+            pig[region]     = [0]*nyear
+
+        try:
+            total_wd[region] = map(lambda tb,sh,pt,pg: tb+sh+pt+pg, total_bovine, sheepgoat, poultry[region], pig[region])
+        except TypeError:
+            stderr.write('[proc_wdlivestock]: bad table data for region = %s.\n' % region)
+            stderr.write('\ttotal_bovine: %s\n' % str(total_bovine))
+            stderr.write('\tsheepgoat:    %s\n' % str(sheepgoat))
+            stderr.write('\tpoultry:      %s\n' % str(poultry[region]))
+            stderr.write('\tpig:          %s\n' % str(pig[region]))
+            raise
+        
+        ## end of loop over regions
 
     ## write out each table.  the order is:
     ##   buffalo, cattle, goat, sheep, poultry, pig
@@ -386,37 +441,71 @@ def proc_irr_share(infilename, outfile):
             
 ## end of irrigation share reader
 
-lasplit = re.compile(r'([a-zA-Z_]+)AEZ([0-9]+)')
+lasplit = re.compile(r'([a-zA-Z_ ]+)AEZ([0-9]+)(IRR|RFD)?')
 def proc_ag_area(infilename, outfilename):
     """read in the agricultural area data, reformat, and write out
 
-    The file format is:
-      scenario, region, land-allocation (==crop+aez), 1990, 2005, 2010, ..., 2095, units
+    The file row format is:
+      comment line
+      header line
+      data
+
+    The file column format is ('?' indicates a column that is not always present):
+      scenario, region, land-allocation (==crop+aez), 1990, 2005, 2010, ..., 2095, 2100 (?), units
     The output we want is:
       region-number, aez-number, crop-number, 1990, 2005, 2010, ..., 2095
+
+    Furthermore, if GCAM produced separate totals for irrigated and
+    rain-fed crops, we want to include only the irrigated.  So, we
+    skip any allocations for the rain-fed versions of a crop.  Earlier
+    versions of GCAM did not make the distinction, so if we are
+    running on one of those output files we have to correct the total
+    planted area with a precalculated irrigation fraction in a later
+    step.
 
     The arguments are the input file name and output file name,
     respectively.
 
+    return value: Flag indicating whether the GCAM run produced an
+                   endogeneous allocation between irrigated and rain-fed
+                   crops.
+
     """
+
+    ## Flag indicating whether we are using GCAM's irrigation.  We
+    ## won't know for sure until we read the first line of data.
+    ## Assume not, by default.
+    gcam_irr = False             
+    
     with open(outfilename,"w") as outfile:
         with open(infilename,"r") as infile:
-            ## 2 header lines to discard
-            infile.readline()        
+            ## discard comment line
             infile.readline()
+
+            ## Check the header line to see if we have a year 2100.
+            ## If so, discard it in all data lines.
+            fields = util.rm_trailing_comma(infile.readline()).split(',')
+            if fields[-2] == '2100':
+                lstfld = -2     # i.e., data = fields[3:-2], dropping the last 2 columns
+            else:
+                lstfld = -1     # i.e., data = fields[3:-1], dropping only the last column
 
             for line in infile:
                 line = util.rm_trailing_comma(util.scenariofix(line))
-                #print line
                 fields = line.split(',')
                 rgntxt = fields[1]
                 latxt  = fields[2]
-                data   = fields[3:-1]
+                data   = fields[3:lstfld]    # chop off units column and possibly 2100 column.
 
                 rgnno   = regions_ordered.index(rgntxt)+1
                 lamatch = lasplit.match(latxt)
                 croptxt = lamatch.group(1)
                 aezno   = int(lamatch.group(2))
+                if lamatch.group(3) is not None:
+                    gcam_irr = True
+                    if lamatch.group(3) == 'RFD':
+                        ## Do not include rain-fed crops in the total.
+                        continue 
 
                 try:
                     cropno = croplist.index(croptxt) + 1
@@ -436,6 +525,8 @@ def proc_ag_area(infilename, outfilename):
                 ## don't sort by region.
                 outfile.write(','.join(map(str,data)))
                 outfile.write('\n')
+
+    return gcam_irr
 ## done with proc_ag_area
 
 def proc_ag_vol(infilename, outfilename):
@@ -451,9 +542,12 @@ def proc_ag_vol(infilename, outfilename):
     The arguments are the input and output filenames.
 
     """
+    
     with open(outfilename,"w") as outfile:
         with open(infilename,"r") as infile:
             ## 2 header lines to discard
+            ## XXX do we need to drop 2100 column here?  We tested without
+            ##     and it didn't seem to hurt anything.
             infile.readline()
             infile.readline()
 
