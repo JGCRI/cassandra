@@ -301,13 +301,13 @@ class GlobalParamsModule(GcamModuleBase):
         self.results['ModelInterface'] = util.abspath(self.results['ModelInterface'])
         self.results['DBXMLlib'] = util.abspath(self.results['DBXMLlib'])
 
-        if self.results.has_key('inputdir'):
+        if 'inputdir' in self.results:
             inputdir = self.results['inputdir']
         else:
             inputdir = './input-data'
         self.results['inputdir'] = util.abspath(inputdir,os.getcwd())
         
-        if self.results.has_key('rgnconfig'):
+        if 'rgnconfig' in self.results:
             rgnconfig = self.results['rgnconfig']
         else:
             stdout.write('[GlobalParamsModule]: Using default region mapping (14 region)')
@@ -513,7 +513,7 @@ class HydroModule(GcamModuleBase):
         ## get initial channel storage from historical hydrology
         ## module if available, or from self-parameters if not
         ## XXX Should the self-parameters override the module or vice versa?
-        if self.cap_tbl.has_key('historical-hydro'):
+        if 'historical-hydro' in self.cap_tbl:
             hist_rslts = self.cap_tbl['historical-hydro'].fetch()
             initstorage = hist_rslts['chstorfile']
         else:
@@ -826,8 +826,8 @@ class WaterDisaggregationModule(GcamModuleBase):
         hydro_rslts = self.cap_tbl["gcam-hydro"].fetch() # hydrology module
         genparams   = self.cap_tbl['general'].fetch()   # general parameters
 
-        if self.params.has_key('dbxml'):
-            if self.cap_tbl.has_key('gcam-core'):
+        if 'dbxml' in self.params:
+            if 'gcam-core' in self.cap_tbl:
                 stdout.write('[WaterDisaggregationModule]: WARNING - gcam module included and dbfile specified.  Using dbfile and ignoring module.\n')
             gcam_rslts = {'dbxml' : self.params['dbxml'],
                           'changed' : False} 
@@ -847,7 +847,7 @@ class WaterDisaggregationModule(GcamModuleBase):
 
         rgnconfig = genparams['rgnconfig']
 
-        if self.params.has_key('inputdir'):
+        if 'inputdir' in self.params:
             inputdir = self.params['inputdir'] # static inputs, such as irrigation share and query files.
         else:
             inputdir = genparams['inputdir']
@@ -859,7 +859,7 @@ class WaterDisaggregationModule(GcamModuleBase):
         gridrgn = util.abspath('newgrd_GCAM.csv',rgnconfig)
         
         ## Parse the water transfer parameters.
-        if self.params.has_key('water-transfer'):
+        if 'water-transfer' in self.params:
             transfer      = util.parseTFstring(self.params['water-transfer'])
             try:
                 transfer_file = util.abspath(self.params['transfer-file'], workdir)
