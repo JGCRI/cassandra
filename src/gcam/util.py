@@ -121,19 +121,20 @@ def gcam_query(queryfiles, dbxmlfiles, outfiles):
                     the query list.
 
     """
-    if hasattr(queryfiles,'__iter__'):
+
+    if hasattr(queryfiles,'__iter__') and not isinstance(queryfiles, str):
         qlist = queryfiles
     else:
         qlist = [queryfiles]
 
-    if hasattr(dbxmlfiles, '__iter__'):
+    if hasattr(dbxmlfiles, '__iter__') and not isinstance(queryfiles, str):
         dbxmllist = dbxmlfiles
         if len(dbxmllist) == 1:
             dbxmllist = dbxmllist*len(qlist)
     else:
         dbxmllist = [dbxmlfiles]*len(qlist)
 
-    if hasattr(outfiles, '__iter__'):
+    if hasattr(outfiles, '__iter__') and not isinstance(queryfiles, str):
         outlist = outfiles
     else:
         outlist = [outfiles]
