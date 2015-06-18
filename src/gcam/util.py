@@ -242,13 +242,25 @@ def chomp(string):
     else:
         return string
 
-def allexist(files):
-    """Test a list of files to determine whether all exist."""
+def allexist(files,stream=None, tag=''):
+    """Test a list of files to determine whether all exist.
+    
+    Arguments:
+       files - the list of filenames to test
+      stream - output stream on which to report non existent files (OPTIONAL)
+         tag - string to prepend to the output (OPTIONAL)
+    """
+    
     allfiles = True
     for file in files:
         if not os.path.exists(file):
             allfiles = False
-            break
+            if stream is not None:
+                stream.write('%s:  File %s does not exist.\n' % (tag, file))
+            else:
+                ## If we're not listing the nonexistent files, then we
+                ## can exit once we've found a missing one
+                break
     return allfiles
 
 def abspath(filename,defaultpath=None, tag=None):

@@ -37,7 +37,7 @@ import tempfile
 from sys import stdout
 from sys import stderr
 from gcam import util
-
+import gcam.water.waterdata as waterdata
 
 class GcamModuleBase(object):
     """Common base class for all of the GCAM modules (i.e., functional units).  
@@ -519,7 +519,6 @@ class HydroModule(GcamModuleBase):
         else:
             initstorage = self.params["init-storage-file"] # matlab data file containing initial storage
 
-        
         os.chdir(workdir)
 
         if inputdir[-1] != '/':
@@ -563,6 +562,7 @@ class HydroModule(GcamModuleBase):
         ## csv tables for diagnostics
         basinqtblfile  = boutbase + '.csv'
         rgnqtblfile    = routbase + '.csv'
+        ctryqtblfile   = outputdir+'ctry-runoff-235-'+gcm+'-'+scenario+'-'+runid+'.csv'
         
         ## Our result is the location of these output files.  Set that
         ## now, even though the files won't be created until we're
@@ -584,7 +584,8 @@ class HydroModule(GcamModuleBase):
         self.results['runid']      = runid
 
         alloutfiles = [qoutfile, foutfile, cqfile, cflxfile, basinqfile, cbasinqfile,
-                       rgnqfile, crgnqfile, basinqtblfile, rgnqtblfile, petoutfile]
+                       rgnqfile, crgnqfile, basinqtblfile, rgnqtblfile, petoutfile, ctryqtblfile]
+        stdout.write('[HydroModule]: alloutfiles:\n\t%s\n' % str(alloutfiles))
         if not self.clobber and util.allexist(alloutfiles):
             ## all files exist, and we don't want to clobber them
             print "[HydroModule]:  results exist and no clobber.  Skipping."
@@ -610,12 +611,18 @@ class HydroModule(GcamModuleBase):
         print 'Running the matlab hydrology code'
         with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_future_hydro('%s','%s','%s','%s','%s', %d, '%s','%s','%s', '%s','%s');exit" %
-                       (prefile,tempfile,dtrfile,initstorage,gridrgn, startmonth, qoutfile,foutfile,petoutfile, basinqfile,rgnqfile)]
+                       "run_future_hydro('%s','%s','%s','%s','%s', %d, '%s','%s','%s', '%s','%s','%s');exit" %
+                       (prefile,tempfile,dtrfile,initstorage,gridrgn, startmonth, qoutfile,foutfile,petoutfile, basinqfile,rgnqfile,ctryqtblfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
             rc = sp.wait()
         ## matlab often won't return an error code when it fails, so check to see that all files were created
         if util.allexist(alloutfiles):
+            ## We need to add a header to the country level output and translate nonstandard country codes to ISO
+            newfile = 'ctry-runoff-'+gcm+'-'+scenario+'-'+runid+'-ISO.csv'
+            countrytbl = waterdata.read_matlab_csv(ctryqtblfile)
+            header = ['ISO'] + map(lambda x: 2010+5*x, range(len(countrytbl[0])-1))
+            stdout.write('[HydroModule]: header for data:\n\t%s\n'%str(header))
+            waterdata.write_csv(newfile, waterdata.watercode2iso(countrytbl,start=0), header) 
             return rc
         else:
             stderr.write('[HydroModule]: Some output files missing.  Check logfile (%s) for more information\n'%logfile)
@@ -706,6 +713,7 @@ class HistoricalHydroModule(GcamModuleBase):
         rgnqtblfile   = outputdir + 'rgn_runoff_235_' + gcm + '_' + scenario + '_' + runid + '.csv'        
         foutfile      = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
         chstorfile    = outputdir + 'InitChStor_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        ctryqtblfile  = outputdir + 'ctry-runoff-235-' + gcm + '-' + scenario + '-' + runid + '.csv'
 
         ## Results will be these file names.  Set up the results
         ## entries now, even though the files won't be ready yet.
@@ -717,7 +725,8 @@ class HistoricalHydroModule(GcamModuleBase):
         self.results['petoutfile'] = petoutfile
 
         ## Test to see if the outputs already exist.  If so, then we can skip these calcs.
-        alloutfiles = [qoutfile, foutfile, petoutfile, chstorfile, basinqtblfile, rgnqtblfile]
+        alloutfiles = [qoutfile, foutfile, petoutfile, chstorfile, basinqtblfile, rgnqtblfile,
+                       ctryqtblfile]
         if not self.clobber and util.allexist(alloutfiles):
             print "[HistoricalHydroModule]: results exist and no clobber set.  Skipping."
             self.results['changed'] = 0
@@ -736,12 +745,17 @@ class HistoricalHydroModule(GcamModuleBase):
         print 'Running historical hydrology for gcm= %s   runid= %s' % (gcm, runid)
         with open(logfile,'w') as logdata, open('/dev/null','r') as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_historical_hydro('%s', '%s', '%s', '%s', %d, '%s', '%s','%s', '%s', '%s', '%s');exit" %
-                       (prefile, tempfile, dtrfile, gridrgn, 1, chstorfile, qoutfile, foutfile,petoutfile, basinqtblfile, rgnqtblfile)]
+                       "run_historical_hydro('%s', '%s', '%s', '%s', %d, '%s', '%s','%s', '%s', '%s', '%s', '%s');exit" %
+                       (prefile, tempfile, dtrfile, gridrgn, 1, chstorfile, qoutfile, foutfile,petoutfile, basinqtblfile, rgnqtblfile, ctryqtblfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
             rc = sp.wait()
         ## check to see if the outputs were actually created; matlab will sometimes fail silently
         if util.allexist(alloutfiles):
+            newfile = 'ctry-runoff-'+gcm+'-'+scenario+'-'+runid+'-ISO.csv'
+            countrytbl = waterdata.read_matlab_csv(ctryqtblfile)
+            header = ['ISO'] + map(lambda x: 1950+5*x, range(len(countrytbl[0])-1))
+            stdout.write('[HistoricalHydroModule]: header for data:\n\t%s\n'%str(header))
+            waterdata.write_csv(newfile, waterdata.watercode2iso(countrytbl,start=0), header)
             return rc
         else:
             stderr.write('[HistoricalHydroModule]: Some output files were not created.  Check logfile (%s) for details.\n'%logfile)
@@ -894,11 +908,17 @@ class WaterDisaggregationModule(GcamModuleBase):
         
         vars = ["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi",
                 "basin-supply", "basin-wdtot", "basin-wddom", "basin-wdelec", "basin-wdirr", "basin-wdliv", "basin-wdmfg", "basin-wdmin", "basin-wsi",
-                "rgn-supply", "rgn-wdtot", "rgn-wddom", "rgn-wdelec", "rgn-wdirr", "rgn-wdliv", "rgn-wdmfg", "rgn-wdmin", "rgn-wsi"]
+                "rgn-supply", "rgn-wdtot", "rgn-wddom", "rgn-wdelec", "rgn-wdirr", "rgn-wdliv", "rgn-wdmfg", "rgn-wdmin", "rgn-wsi", 'country-wdtot']
+        allrslts = []
         allfiles = 1
         for var in vars:
-            filename = "%s/%s-%s-%s.dat" % (outputdir, var, scenariotag, runid)
+            if var == 'country-wdtot':
+                suffix = 'csv'
+            else:
+                suffix = 'dat'
+            filename = "%s/%s-%s-%s.%s" % (outputdir, var, scenariotag, runid, suffix)
             self.results[var] = filename
+            allrslts.append(filename)
             if not os.path.exists(filename):
                 print 'File %s does not exist.  Running WaterDisaggregationModule.\n' % filename
                 allfiles = 0
@@ -971,8 +991,18 @@ class WaterDisaggregationModule(GcamModuleBase):
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:
             arglist = ["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r", matlabfn]
 
-            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT) 
-            return sp.wait()
+            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
+            rslt = sp.wait()
+            if util.allexist(allrslts, stderr, '[WaterDisaggregationModule]'):
+                newfile = outdirprep('ctry-wdtot-'+'-'+scenariotag+'-'+runid+'-ISO.csv')
+                countrytbl = waterdata.read_matlab_csv(self.results['country-wdtot'])
+                header = ['ISO', 1990] + map(lambda x: 2005+5*x, range(len(countrytbl[0])-2)) # years for the columns after 1990 start at 2005 and count up by 5
+                stdout.write('[WaterDisaggregationModule]: header for data:\n\t%s\n'%str(header))
+                waterdata.write_csv(newfile, waterdata.watercode2iso(countrytbl),header)
+            else:
+                stderr.write('[WaterDisaggregationModule]:  Some output files not successfully created!  Check logfile %s for details\n' % self.params['logfile'])
+                return 1
+            return rslt
         
     ## end of runmod
         

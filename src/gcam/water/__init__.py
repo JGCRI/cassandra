@@ -1,3 +1,3 @@
 #!/bin/env python
 
-__all__ = ['waterdisag']
+__all__ = ['waterdisag', 'waterdata']
