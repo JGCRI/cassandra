@@ -423,14 +423,13 @@ class GcamModule(GcamModuleBase):
                         break
 
         ## now we're ready to actually do the run.  We don't check the return code; we let the run() method do that.
-        os.chdir(self.workdir)
         print "Running:  %s -C%s -L%s" % (exe, cfg, logcfg)
 
         if logfile is None:
-            return subprocess.call([exe, '-C'+cfg, '-L'+logcfg])
+            return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], cwd=self.workdir)
         else:
             with open(logfile,"w") as lf:
-                return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf)
+                return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf, cwd=self.workdir)
 
 ## class for the hydrology code
 
@@ -520,8 +519,6 @@ class HydroModule(GcamModuleBase):
             initstorage = self.params["init-storage-file"] # matlab data file containing initial storage
 
         
-        os.chdir(workdir)
-
         if inputdir[-1] != '/':
             inputdir = inputdir + '/'
         if outputdir[-1] != '/':
@@ -612,7 +609,8 @@ class HydroModule(GcamModuleBase):
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
                        "run_future_hydro('%s','%s','%s','%s','%s', %d, '%s','%s','%s', '%s','%s');exit" %
                        (prefile,tempfile,dtrfile,initstorage,gridrgn, startmonth, qoutfile,foutfile,petoutfile, basinqfile,rgnqfile)]
-            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
+            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
+                                  cwd=workdir)
             rc = sp.wait()
         ## matlab often won't return an error code when it fails, so check to see that all files were created
         if util.allexist(alloutfiles):
@@ -677,8 +675,6 @@ class HistoricalHydroModule(GcamModuleBase):
             startmonth = 1      # Default is January
         print '[HistoricalHydroModule]: start month = %d' % startmonth
 
-        os.chdir(workdir)
-
         if inputdir[-1] != '/':
             inputdir = inputdir + '/'
         if outputdir[-1] != '/':
@@ -738,7 +734,8 @@ class HistoricalHydroModule(GcamModuleBase):
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
                        "run_historical_hydro('%s', '%s', '%s', '%s', %d, '%s', '%s','%s', '%s', '%s', '%s');exit" %
                        (prefile, tempfile, dtrfile, gridrgn, 1, chstorfile, qoutfile, foutfile,petoutfile, basinqtblfile, rgnqtblfile)]
-            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
+            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
+                                  cwd=workdir)
             rc = sp.wait()
         ## check to see if the outputs were actually created; matlab will sometimes fail silently
         if util.allexist(alloutfiles):
@@ -821,7 +818,6 @@ class WaterDisaggregationModule(GcamModuleBase):
         import gcam.water.waterdisag as waterdisag
 
         workdir  = self.params["workdir"]
-        os.chdir(workdir)
 
         hydro_rslts = self.cap_tbl["gcam-hydro"].fetch() # hydrology module
         genparams   = self.cap_tbl['general'].fetch()   # general parameters
@@ -971,7 +967,8 @@ class WaterDisaggregationModule(GcamModuleBase):
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:
             arglist = ["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r", matlabfn]
 
-            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT) 
+            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
+                                  cwd=workdir) 
             return sp.wait()
         
     ## end of runmod
