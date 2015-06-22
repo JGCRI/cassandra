@@ -1,4 +1,18 @@
+"""Test the gcam queries used by the automation system on a specified db file
+
+Usage:  gcquery-test.py <dbfile>
+"""
+
 import sys
+
+## set dbfile to use for testing
+try:
+    dbfile = sys.argv[1]
+except IndexError:
+    sys.exit('Error: no dbfile specified.\nUsage:  %s <dbfile>\n'%sys.argv[0])
+    
+
+
 
 ## enable this code to run from the gcam/test/ directory
 sys.path.append('../..')
@@ -17,26 +31,27 @@ for key in genparams.keys():
     global_params.addparam(key, genparams[key])
 global_params.run()
 
-dbfile = "/lustre/data/rpl/gcam-ifam-32rgn/database_basexdb"
-
-queryfiles = ['input-data/batch-land-alloc.xml', 'input-data/batch-population.xml', 'input-data/batch-water-ag.xml',
-              'input-data/batch-water-dom.xml', 'input-data/batch-water-elec.xml', 'input-data/batch-water-livestock.xml',
-              'input-data/batch-water-mfg.xml', 'input-data/batch-water-mining-alt.xml']
+queryfiles = ['batch-land-alloc.xml', 'batch-population.xml', 'batch-water-ag.xml',
+              'batch-water-dom.xml', 'batch-water-elec.xml', 'batch-water-livestock.xml',
+              'batch-water-mfg.xml', 'batch-water-mining-alt.xml']
 
 
 ## add the directory path to the query files
-queryfiles = map(lambda file: '/lustre/data/rpl/gcam-driver/' + file, queryfiles)
+querydir   = '../../../input-data/'
+queryfiles = map(lambda file: querydir + file, queryfiles)
 
 outfiles = ['batch-land-alloc.csv', 'batch-population.csv', 'batch-water-ag.csv',
               'batch-water-dom.csv', 'batch-water-elec.csv', 'batch-water-livestock.csv',
               'batch-water-mfg.csv', 'batch-water-mining.csv']
 
-outfiles = map(lambda file: '/lustre/data/rpl/gcam-driver/output/test/' + file, outfiles)
+outfiles = map(lambda file: 'output/' + file, outfiles)
 
 of_new = util.gcam_query(queryfiles, dbfile, outfiles)
 
 ## Just test the queries, not the processing.
-raise SystemExit
+sys.exit(0)
+
+## TODO: test the output processing as well as the queries.
 
 ## process the non-ag water
 wd_dom  = waterdisag.proc_wdnonag('output/batch-water-dom.csv', 'output/final_wd_dom.csv')
