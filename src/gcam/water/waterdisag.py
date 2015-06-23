@@ -442,7 +442,7 @@ def proc_irr_share(infilename, outfile):
 ## end of irrigation share reader
 
 lasplit = re.compile(r'([a-zA-Z_ ]+)AEZ([0-9]+)(IRR|RFD)?')
-def proc_ag_area(infilename, outfilename):
+def proc_ag_area(infilename, outfilename,drop2100=True):
     """read in the agricultural area data, reformat, and write out
 
     The file row format is:
@@ -463,8 +463,11 @@ def proc_ag_area(infilename, outfilename):
     planted area with a precalculated irrigation fraction in a later
     step.
 
-    The arguments are the input file name and output file name,
-    respectively.
+    Arguments:
+      infilename  - Name of the input file
+      outfilename - Name of the output file
+      drop2100    - Flag:  True  = drop the 2100 data column (if present);
+                           False = keep 2100 (if present)
 
     return value: Flag indicating whether the GCAM run produced an
                    endogeneous allocation between irrigated and rain-fed
@@ -485,7 +488,7 @@ def proc_ag_area(infilename, outfilename):
             ## Check the header line to see if we have a year 2100.
             ## If so, discard it in all data lines.
             fields = util.rm_trailing_comma(infile.readline()).split(',')
-            if fields[-2] == '2100':
+            if fields[-2] == '2100' and drop2100:
                 lstfld = -2     # i.e., data = fields[3:-2], dropping the last 2 columns
             else:
                 lstfld = -1     # i.e., data = fields[3:-1], dropping only the last column
@@ -539,7 +542,11 @@ def proc_ag_vol(infilename, outfilename):
     The output format is:
       region-number, aez-number, crop-number, 1990, 2005, 2010, ..., 2095
 
-    The arguments are the input and output filenames.
+    Arguments:
+      infilename  - Name of input file
+      outfilename - Name of the output file
+
+    Return value:  None 
 
     """
     
