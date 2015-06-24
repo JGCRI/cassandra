@@ -445,13 +445,6 @@ lasplit = re.compile(r'([a-zA-Z_ ]+)AEZ([0-9]+)(IRR|RFD)?')
 def proc_ag_area(infilename, outfilename,drop2100=True):
     """read in the agricultural area data, reformat, and write out
 
-    The file row format is:
-      comment line
-      header line
-      data
-
-    The file column format is ('?' indicates a column that is not always present):
-      scenario, region, land-allocation (==crop+aez), 1990, 2005, 2010, ..., 2095, 2100 (?), units
     The output we want is:
       region-number, aez-number, crop-number, 1990, 2005, 2010, ..., 2095
 
@@ -477,60 +470,114 @@ def proc_ag_area(infilename, outfilename,drop2100=True):
 
     ## Flag indicating whether we are using GCAM's irrigation.  We
     ## won't know for sure until we read the first line of data.
-    ## Assume not, by default.
+    ## Start by assuming it is.
     gcam_irr = False             
     
-    with open(outfilename,"w") as outfile:
-        with open(infilename,"r") as infile:
-            ## discard comment line
-            infile.readline()
+    ag_area = rd_gcam_ag_area(infilename, drop2100)
 
-            ## Check the header line to see if we have a year 2100.
-            ## If so, discard it in all data lines.
-            fields = util.rm_trailing_comma(infile.readline()).split(',')
-            if fields[-2] == '2100' and drop2100:
-                lstfld = -2     # i.e., data = fields[3:-2], dropping the last 2 columns
-            else:
-                lstfld = -1     # i.e., data = fields[3:-1], dropping only the last column
+    with open(outfilename,"w") as outfile: 
+        for (key,data) in ag_area.items():
+            (rgnno, aezno, cropno, irr) = key
+            if irr == 'TOT':
+                ## indicate that GCAM is providing total area
+                gcam_irr = False
+            elif irr == 'RFD':
+                ## do not include rain-fed crops in the result
+                continue
 
-            for line in infile:
-                line = util.rm_trailing_comma(util.scenariofix(line))
-                fields = line.split(',')
-                rgntxt = fields[1]
-                latxt  = fields[2]
-                data   = fields[3:lstfld]    # chop off units column and possibly 2100 column.
+            ## prepend the region, aez, and crop numbers to the data
+            data.insert(0,cropno)
+            data.insert(0,aezno)
+            data.insert(0,rgnno)
 
-                rgnno   = regions_ordered.index(rgntxt)+1
-                lamatch = lasplit.match(latxt)
-                croptxt = lamatch.group(1)
-                aezno   = int(lamatch.group(2))
-                if lamatch.group(3) is not None:
-                    gcam_irr = True
-                    if lamatch.group(3) == 'RFD':
-                        ## Do not include rain-fed crops in the total.
-                        continue 
-
-                try:
-                    cropno = croplist.index(croptxt) + 1
-                except ValueError as e:
-                    if croptxt in biomasslist:
-                        cropno = croplist.index("biomass") + 1
-                    else:
-                        raise
-
-                ## prepend the region, aez, and crop numbers to the data
-                data.insert(0,cropno)
-                data.insert(0,aezno)
-                data.insert(0,rgnno)
-
-                #print data
-                ## data go out in the same order they came in; we
-                ## don't sort by region.
-                outfile.write(','.join(map(str,data)))
-                outfile.write('\n')
+            ## No requirement to sort this table by region, so just
+            ## output in the order used by the dictionary
+            outfile.write(','.join(map(str,data)))
+            outfile.write('\n')
 
     return gcam_irr
 ## done with proc_ag_area
+
+
+def read_gcam_ag_area(infilename, drop2100=True):
+    """Read in the agricultural area table produced by gcam and return as a table.
+
+    The file row format is:
+      comment line
+      header line
+      data
+
+    The file column format is ('?' indicates a column that is not always present):
+      scenario, region, land-allocation (==crop+aez), 1990, 2005, 2010, ..., 2095, 2100 (?), units
+
+    We will store the table in a dictionary indexed by (region-number,
+    aez-number, crop-number, irrigated).  The data will be a list of
+    output land area values for each region,aez,crop,irrigation
+    combination.  The irrigation values can take on one of three
+    values:
+       IRR - irrigated
+       RFD - rain fed
+       TOT - total
+
+    The last of these will only occur for GCAM output data that does
+    not distinguish between irrigated and rain fed crops (i.e., older
+    versions of GCAM).  In these cases, all irrigation values will be
+    TOT, with no IRR or RFD values appearing.  Thus, the presence of a
+    TOT irrigation type serves as a reliable indicator of whether or
+    not a correction for irrigation fraction is needed.
+
+    Arguments:
+      infilename   - input file name
+      drop2100     - flag: True = drop the 2100 column from the output.
+
+    Return value: 
+      Dictionary containing the table, indexed as indicated above.
+      Table values will be numerical, not strings.
+
+    """
+
+    table = {}
+    with open(infilename,"r") as infile:
+        ## discard comment line
+        infile.readline()
+
+        ## Check the header line to see if we have a year 2100.
+        ## If so, discard it in all data lines.
+        fields = util.rm_trailing_comma(infile.readline()).split(',')
+        if fields[-2] == '2100' and drop2100:
+            lstfld = -2     # i.e., data = fields[3:-2], dropping the last 2 columns
+        else:
+            lstfld = -1     # i.e., data = fields[3:-1], dropping only the last column
+
+        for line in infile:
+            line = util.rm_trailing_comma(util.scenariofix(line))
+            fields    = line.split(',')
+            rgntxt    = fields[1]
+            latxt     = fields[2]           # land area text
+            datastr   = fields[3:lstfld]    # chop off units column and possibly 2100 column.
+            data      = map(lambda s:float(s), datastr)
+
+            ## split land area text to get crop, aez, and possibly irrigation status
+            lamatch = lasplit.match(latxt)
+            croptxt = lamatch.group(1)
+            aezno   = int(lamatch.group(2))
+            irrstat = lamatch.group(3)
+            if irrstat is None:
+                irrstat = 'TOT' 
+
+            ## convert region and crop to index numbers
+            rgnno   = regions_ordered.index(rgntxt)+1 
+            try:
+                cropno = croplist.index(croptxt) + 1
+            except ValueError as e:
+                if croptxt in biomasslist:
+                    cropno = croplist.index("biomass") + 1
+                else:
+                    raise
+
+            table[(rgnno,aezno,cropno,irrstat)] = data
+
+        return table 
 
 def proc_ag_vol(infilename, outfilename):
     """Read in volume of water used by agriculture, reformat, and write out.  
