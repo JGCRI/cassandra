@@ -7,6 +7,6 @@ cd /lustre/data/rpl/gcam-driver
 date
 tap -q matlab
 tap java6
-time ./gcam-driver ./wb-fio.cfg
+time ./gcam-driver ./run-config/wb-fio-rcp6.cfg
 date
 
