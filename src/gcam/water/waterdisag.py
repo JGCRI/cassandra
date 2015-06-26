@@ -471,9 +471,9 @@ def proc_ag_area(infilename, outfilename,drop2100=True):
     ## Flag indicating whether we are using GCAM's irrigation.  We
     ## won't know for sure until we read the first line of data.
     ## Start by assuming it is.
-    gcam_irr = False             
+    gcam_irr = True
     
-    ag_area = rd_gcam_ag_area(infilename, drop2100)
+    ag_area = read_gcam_ag_area(infilename, drop2100)
 
     with open(outfilename,"w") as outfile: 
         for (key,data) in ag_area.items():
@@ -495,6 +495,7 @@ def proc_ag_area(infilename, outfilename,drop2100=True):
             outfile.write(','.join(map(str,data)))
             outfile.write('\n')
 
+    stdout.write('[proc_ag_area]: gcam_irr = %s\n' % gcam_irr)
     return gcam_irr
 ## done with proc_ag_area
 

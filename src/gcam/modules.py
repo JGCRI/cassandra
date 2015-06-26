@@ -886,7 +886,8 @@ class WaterDisaggregationModule(GcamModuleBase):
 
         inputdirprep  = get_dir_prepender(inputdir)
         tempdirprep = get_dir_prepender(tempdir)
-        outdirprep  = get_dir_prepender(outputdir) 
+        outdirprep  = get_dir_prepender(outputdir)
+        rgndirprep  = get_dir_prepender(rgnconfig)
         
         vars = ["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi",
                 "basin-supply", "basin-wdtot", "basin-wddom", "basin-wdelec", "basin-wdirr", "basin-wdliv", "basin-wdmfg", "basin-wdmin", "basin-wsi",
@@ -950,7 +951,7 @@ class WaterDisaggregationModule(GcamModuleBase):
             ## If GCAM didn't produce endogeneous irrigated and
             ## rain-fed land allocations, then we need to read in some
             ## precalculated irrigation shares.
-            waterdisag.proc_irr_share(inputdirprep('irrigation-frac.csv'), tempdirprep("irrS.csv"))
+            waterdisag.proc_irr_share(rgndirprep('irrigation-frac.csv'), tempdirprep("irrS.csv"))
             read_irrS = 1       # argument to matlab code
         else:
             read_irrS = 0
