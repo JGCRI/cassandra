@@ -301,13 +301,13 @@ class GlobalParamsModule(GcamModuleBase):
         self.results['ModelInterface'] = util.abspath(self.results['ModelInterface'])
         self.results['DBXMLlib'] = util.abspath(self.results['DBXMLlib'])
 
-        if self.results.has_key('inputdir'):
+        if 'inputdir' in self.results:
             inputdir = self.results['inputdir']
         else:
             inputdir = './input-data'
         self.results['inputdir'] = util.abspath(inputdir,os.getcwd())
         
-        if self.results.has_key('rgnconfig'):
+        if 'rgnconfig' in self.results:
             rgnconfig = self.results['rgnconfig']
         else:
             stdout.write('[GlobalParamsModule]: Using default region mapping (14 region)')
@@ -423,14 +423,13 @@ class GcamModule(GcamModuleBase):
                         break
 
         ## now we're ready to actually do the run.  We don't check the return code; we let the run() method do that.
-        os.chdir(self.workdir)
         print "Running:  %s -C%s -L%s" % (exe, cfg, logcfg)
 
         if logfile is None:
-            return subprocess.call([exe, '-C'+cfg, '-L'+logcfg])
+            return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], cwd=self.workdir)
         else:
             with open(logfile,"w") as lf:
-                return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf)
+                return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf, cwd=self.workdir)
 
 ## class for the hydrology code
 
@@ -513,13 +512,11 @@ class HydroModule(GcamModuleBase):
         ## get initial channel storage from historical hydrology
         ## module if available, or from self-parameters if not
         ## XXX Should the self-parameters override the module or vice versa?
-        if self.cap_tbl.has_key('historical-hydro'):
+        if 'historical-hydro' in self.cap_tbl:
             hist_rslts = self.cap_tbl['historical-hydro'].fetch()
             initstorage = hist_rslts['chstorfile']
         else:
             initstorage = self.params["init-storage-file"] # matlab data file containing initial storage
-
-        os.chdir(workdir)
 
         if inputdir[-1] != '/':
             inputdir = inputdir + '/'
@@ -613,7 +610,8 @@ class HydroModule(GcamModuleBase):
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
                        "run_future_hydro('%s','%s','%s','%s','%s', %d, '%s','%s','%s', '%s','%s','%s');exit" %
                        (prefile,tempfile,dtrfile,initstorage,gridrgn, startmonth, qoutfile,foutfile,petoutfile, basinqfile,rgnqfile,ctryqtblfile)]
-            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
+            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
+                                  cwd=workdir)
             rc = sp.wait()
         ## matlab often won't return an error code when it fails, so check to see that all files were created
         if util.allexist(alloutfiles):
@@ -684,8 +682,6 @@ class HistoricalHydroModule(GcamModuleBase):
             startmonth = 1      # Default is January
         print '[HistoricalHydroModule]: start month = %d' % startmonth
 
-        os.chdir(workdir)
-
         if inputdir[-1] != '/':
             inputdir = inputdir + '/'
         if outputdir[-1] != '/':
@@ -747,7 +743,8 @@ class HistoricalHydroModule(GcamModuleBase):
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
                        "run_historical_hydro('%s', '%s', '%s', '%s', %d, '%s', '%s','%s', '%s', '%s', '%s', '%s');exit" %
                        (prefile, tempfile, dtrfile, gridrgn, 1, chstorfile, qoutfile, foutfile,petoutfile, basinqtblfile, rgnqtblfile, ctryqtblfile)]
-            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
+            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
+                                  cwd=workdir)
             rc = sp.wait()
         ## check to see if the outputs were actually created; matlab will sometimes fail silently
         if util.allexist(alloutfiles):
@@ -835,13 +832,12 @@ class WaterDisaggregationModule(GcamModuleBase):
         import gcam.water.waterdisag as waterdisag
 
         workdir  = self.params["workdir"]
-        os.chdir(workdir)
 
         hydro_rslts = self.cap_tbl["gcam-hydro"].fetch() # hydrology module
         genparams   = self.cap_tbl['general'].fetch()   # general parameters
 
-        if self.params.has_key('dbxml'):
-            if self.cap_tbl.has_key('gcam-core'):
+        if 'dbxml' in self.params:
+            if 'gcam-core' in self.cap_tbl:
                 stdout.write('[WaterDisaggregationModule]: WARNING - gcam module included and dbfile specified.  Using dbfile and ignoring module.\n')
             gcam_rslts = {'dbxml' : self.params['dbxml'],
                           'changed' : False} 
@@ -861,7 +857,7 @@ class WaterDisaggregationModule(GcamModuleBase):
 
         rgnconfig = genparams['rgnconfig']
 
-        if self.params.has_key('inputdir'):
+        if 'inputdir' in self.params:
             inputdir = self.params['inputdir'] # static inputs, such as irrigation share and query files.
         else:
             inputdir = genparams['inputdir']
@@ -873,7 +869,7 @@ class WaterDisaggregationModule(GcamModuleBase):
         gridrgn = util.abspath('newgrd_GCAM.csv',rgnconfig)
         
         ## Parse the water transfer parameters.
-        if self.params.has_key('water-transfer'):
+        if 'water-transfer' in self.params:
             transfer      = util.parseTFstring(self.params['water-transfer'])
             try:
                 transfer_file = util.abspath(self.params['transfer-file'], workdir)
@@ -991,7 +987,8 @@ class WaterDisaggregationModule(GcamModuleBase):
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:
             arglist = ["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r", matlabfn]
 
-            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT)
+            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
+                                  cwd=workdir)
             rslt = sp.wait()
             if util.allexist(allrslts, stderr, '[WaterDisaggregationModule]'):
                 newfile = outdirprep('ctry-wdtot-'+'-'+scenariotag+'-'+runid+'-ISO.csv')

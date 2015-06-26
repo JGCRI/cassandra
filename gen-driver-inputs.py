@@ -96,7 +96,7 @@ for gcm in gcms:
                 ## the output file uses the gcam-version of the scenario
                 ## designator.  Eventually it will also use a code for the
                 ## GCM.
-                if gcm_codes.has_key(gcm):
+                if gcm in gcm_codes:
                     gcm_str = gcm_codes[gcm]
                 else:
                     gcm_str = gcm+'-'
