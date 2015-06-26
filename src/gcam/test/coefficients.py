@@ -59,23 +59,24 @@ for (rgn,aez,crop,irr) in ag_area:
 
         irr_shr[(rgn,aez,crop)]   = map(lambda x,y:x/(x+y+1e-12), irrigated, rainfed)
 
-datalen = 20
 with open('output/irrigation-frac.csv','w') as outfile:
     for (rgnidx, rgn) in enumerate(water.waterdisag.regions_ordered):
+        rgnno = rgnidx + 1      # output needs unit-indexed addressing
         for aez in range(1,19):
             for (cropidx, crop) in enumerate(water.waterdisag.croplist):
+                cropno = cropidx + 1 # unit indexing
                 try:
-                    data = irr_shr[(rgnidx, aez, cropidx)]
-                except KeyError:
-                    data = [0]*datalen
+                    data = irr_shr[(rgnno, aez, cropno)]
 
-                data.insert(0,cropidx)
-                data.insert(0,aez)
-                data.insert(0,rgnidx)
-
-                data.append(rgn)
-                data.append(crop)
-
-                outfile.write(','.join(map(str,data)))
-                outfile.write('\n')
-
+                    data.insert(0,cropno)
+                    data.insert(0,aez)
+                    data.insert(0,rgnno)
+                    
+                    data.append(rgn)
+                    data.append(crop)
+                    
+                    outfile.write(','.join(map(str,data)))
+                    outfile.write('\n')
+                except KeyError: # skip combinations that don't occur
+                    pass
+#end                
