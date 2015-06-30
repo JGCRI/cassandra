@@ -24,7 +24,7 @@ from gcam.water import waterdisag
 
 ## Set up the global parameters module (which is used by some of the
 ## utility functions).
-genparams = {"ModelInterface" : "/lustre/data/rpl/ModelInterface-baseX/ModelInterface.jar",
+genparams = {"ModelInterface" : "/lustre/data/rpl/ModelInterface/ModelInterface.jar",
              "DBXMLlib" : "/homes/pralitp/libs/dbxml-2.5.16/install/lib"} 
 global_params = GlobalParamsModule({})
 for key in genparams.keys():
