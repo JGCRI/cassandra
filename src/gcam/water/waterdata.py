@@ -7,7 +7,7 @@ import os
 
 country_watercode_table = None
 ## XXX fixme
-default_water_iso_file = '/lustre/data/rpl/gcam-driver/input-data/water-country-ISO.csv'
+default_water_iso_file = './input-data/water-country-ISO.csv'
 
 def read_matlab_csv(filename, idcol=True):
     """Read a csv file produced by Matlab.
