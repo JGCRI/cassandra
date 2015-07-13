@@ -920,7 +920,7 @@ class WaterDisaggregationModule(GcamModuleBase):
                       'batch-water-mfg.csv', 'batch-water-mining.csv']
         queryfiles = map(inputdirprep, queryfiles)
         outfiles = map(tempdirprep, outfiles)
-        util.gcam_query(queryfiles, dbxmlfile, outfiles)
+        util.gcam_query(queryfiles, dbxmlfile, inputdir, outfiles)
 
         ### reformat the GCAM outputs into the files the matlab code needs 
         ### note all the csv files referred to here are temporary

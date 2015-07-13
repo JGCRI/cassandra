@@ -24,6 +24,7 @@ from gcam.water import waterdisag
 
 ## Set up the global parameters module (which is used by some of the
 ## utility functions).
+## XXX these paths are specific to the configuration on Evergreen.
 genparams = {"ModelInterface" : "/lustre/data/rpl/ModelInterface-baseX/ModelInterface.jar",
              "DBXMLlib" : "/homes/pralitp/libs/dbxml-2.5.16/install/lib"} 
 global_params = GlobalParamsModule({})
@@ -42,7 +43,7 @@ outfiles = ['output/batch-land-alloc.csv', 'output/batch-water-ag.csv']
 
 
 
-util.gcam_query(queryfiles, dbfile, outfiles)
+util.gcam_query(queryfiles, dbfile, querydir, outfiles)
 
 ag_area_file = outfiles[0]
 ag_area = water.waterdisag.read_gcam_ag_area(ag_area_file)
