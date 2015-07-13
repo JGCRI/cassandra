@@ -104,11 +104,11 @@ def scenariofix(line, newstr="scenario", pat=scen_pattern):
     """
     return pat.sub(newstr, line)
 
-def gcam_query(queryfiles, dbxmlfiles, outfiles):
+def gcam_query(batchqfiles, dbxmlfiles, inputdir, outfiles):
     """Run the indicated queries against a dbxml database
 
     arguments:
-      queryfiles  - List of xml files containing the batch queries to run.  If
+      batchqfiles  - List of xml files containing the batch queries to run.  If
                     there is only one, you can just pass the filename.
  
       dbxmlfiles  - List of dbxml file or files to query.  If there is
@@ -117,24 +117,27 @@ def gcam_query(queryfiles, dbxmlfiles, outfiles):
                     dbxml, the queries will all be run against the
                     same dbxml.
 
+      inputdir    - Directory where the gcam-driver input files are located.
+                    This will typically be provided by the 'general' module.
+
       outfiles    - List of output files.  should be the same length as
                     the query list.
 
     """
 
-    if hasattr(queryfiles,'__iter__') and not isinstance(queryfiles, str):
-        qlist = queryfiles
+    if hasattr(batchqfiles,'__iter__') and not isinstance(batchqfiles, str):
+        qlist = batchqfiles
     else:
-        qlist = [queryfiles]
+        qlist = [batchqfiles]
 
-    if hasattr(dbxmlfiles, '__iter__') and not isinstance(queryfiles, str):
+    if hasattr(dbxmlfiles, '__iter__') and not isinstance(batchqfiles, str):
         dbxmllist = dbxmlfiles
         if len(dbxmllist) == 1:
             dbxmllist = dbxmllist*len(qlist)
     else:
         dbxmllist = [dbxmlfiles]*len(qlist)
 
-    if hasattr(outfiles, '__iter__') and not isinstance(queryfiles, str):
+    if hasattr(outfiles, '__iter__') and not isinstance(batchqfiles, str):
         outlist = outfiles
     else:
         outlist = [outfiles]
@@ -169,7 +172,7 @@ def gcam_query(queryfiles, dbxmlfiles, outfiles):
             ## make a temporary file
             tempquery = None
             try:
-                tempquery = rewrite_query(query, dbxml, output)
+                tempquery = rewrite_query(query, dbxml, inputdir, output)
                 execlist = ['/bin/env', 'DISPLAY=:%d.0'%disp, ldlibpath, 'java', '-jar',
                             ModelInterface, '-b', tempquery]
 
@@ -190,15 +193,26 @@ def gcam_query(queryfiles, dbxmlfiles, outfiles):
 ### Some regular expressions used in query_file_rewrite (private):
 xmldbloc   = re.compile(r'<xmldbLocation>.*</xmldbLocation>')
 outfileloc = re.compile(r'<outFile>.*</outFile>')
+qfileloc   = re.compile(r'<queryFile>(.*)</queryFile>')
 
-def rewrite_query(query, dbxml, outfile):
-    """Rewrite dbxml query file to include the names of the dbxml file and output file.
+def rewrite_query(query, dbxml, inputdir, outfile):
+    """Rewrite dbxml query file to include the names of the dbxml file and output file and location of query file.
 
     The names of the input dbxml and output csv files are encoded in
     the query file.  Since we want to be able to set them, we need to
     treat the query file as a template and create a temporary with the
     real file names.  This function creates the temporary and returns
     its name.
+
+    Arguments:
+      query  - The 'batch query file'.  This is, unfortunately, not the
+               same file as the 'query file', which is mentioned inside
+               the 'batch query file'.
+      dbxml  - The gcam database output file to run the query against
+      inputdir - The location (directory) of the 'query file'.  Generally
+               this will be the 'input-data' directory under the gcam-driver
+               top-level directory.
+     outfile - Name of the output file to put the results in.
 
     """
     (fd, tempqueryname) = tempfile.mkstemp(suffix='.xml') 
@@ -213,8 +227,23 @@ def rewrite_query(query, dbxml, outfile):
     outfilestr = '<outFile>' + outfile + '</outFile>'
 
     for line in origquery:
+        ## replace xml db file name
         line = xmldbloc.sub(dbxmlstr, line)
+        ## replace output file name
         line = outfileloc.sub(outfilestr, line)
+        ## replace query file name.  This one is a bit more
+        ## complicated, as we have to get the base name of the file
+        ## from the template
+        qfile_match = qfileloc.search(line)
+        if(qfile_match):
+            ## get the filename
+            qfile_template = qfile_match.group(1)
+            ## strip off the (probably bogus) directory path and
+            ## replace with inputdir
+            qfile = os.path.basename(qfile_template)
+            qfile = abspath(qfile,defaultpath=inputdir)
+            line = '<queryFile>%s</queryFile>'%qfile
+        
         tempquery.write(line)
 
     tempquery.close()

@@ -24,7 +24,7 @@ from gcam.water import waterdisag
 
 ## Set up the global parameters module (which is used by some of the
 ## utility functions).
-genparams = {"ModelInterface" : "/lustre/data/rpl/ModelInterface-baseX/ModelInterface.jar",
+genparams = {"ModelInterface" : "./../../../../ModelInterface-baseX/ModelInterface.jar",
              "DBXMLlib" : "/homes/pralitp/libs/dbxml-2.5.16/install/lib"} 
 global_params = GlobalParamsModule({})
 for key in genparams.keys():
@@ -46,7 +46,7 @@ outfiles = ['batch-land-alloc.csv', 'batch-population.csv', 'batch-water-ag.csv'
 
 outfiles = map(lambda file: 'output/' + file, outfiles)
 
-of_new = util.gcam_query(queryfiles, dbfile, outfiles)
+of_new = util.gcam_query(queryfiles, dbfile, querydir, outfiles)
 
 ## Just test the queries, not the processing.
 sys.exit(0)
