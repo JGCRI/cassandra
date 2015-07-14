@@ -4,23 +4,33 @@
 
 from gcam import util
 import re
+import os.path
 from sys import stderr,stdout
 
 ## Canonical ordering of the regions for outputs
-regions_ordered = []
+_regions_ordered = []
 ## Reverse lookup table for region ordering
-rgnid = {}
+_rgnid = {}
 
 ## Year-2000 population benchmarks
-gis2000 = {}
+_gis2000 = {}
 
 ## table giving the fraction of beef that is buffalo (vs. cattle), by region
-bfracFAO2005 = {}
+_bfracFAO2005 = {}
 
 ## table giving the fraction of SheepGoat that is goat (vs. sheep), by region
-gfracFAO2005 = {}
+_gfracFAO2005 = {}
 
+## In some configurations (usually ones that provide state/province
+## detail) GCAM abbreviates region names.  This is a dictionary of
+## region names to rewrite.
+_gcam_rgn_translation = {}
 
+## List of regions to drop from gcam results (usually because they
+## don't exist in our grid mapping).  If the region name translation
+## above is in use, the names here should be the names *after*
+## translation.
+_gcam_drop_regions = []
 
 def init_rgn_tables(rgnconfig):
     """Read the region-specific data tables in the rgnconfig directory.
@@ -30,15 +40,38 @@ def init_rgn_tables(rgnconfig):
 
     """
 
-    global gis2000
-    global bfracFAO2005
-    global gfracFAO2005
-    global regions_ordered
+    global _gis2000
+    global _bfracFAO2005
+    global _gfracFAO2005
+    global _regions_ordered
+    global _gcam_rgn_translation
+    global _gcam_drop_regions
     
-    (rgnid, regions_ordered) = util.rd_rgn_table('%s/RgnNames.txt'%rgnconfig)
-    (gis2000, _) = util.rd_rgn_table('%s/gis2000.csv'%rgnconfig)
-    (bfracFAO2005, _) = util.rd_rgn_table('%s/bfracFAO2005.csv'%rgnconfig)
-    (gfracFAO2005, _) = util.rd_rgn_table('%s/gfracFAO2005.csv'%rgnconfig) 
+    (_rgnid, _regions_ordered) = util.rd_rgn_table('%s/RgnNames.txt'%rgnconfig)
+    (_gis2000, _) = util.rd_rgn_table('%s/gis2000.csv'%rgnconfig)
+    (_bfracFAO2005, _) = util.rd_rgn_table('%s/bfracFAO2005.csv'%rgnconfig)
+    (_gfracFAO2005, _) = util.rd_rgn_table('%s/gfracFAO2005.csv'%rgnconfig)
+
+    ## rgn translation file is optional
+    rtfile = '%s/rgn-name-translation.csv' % rgnconfig
+    if os.path.exists(rtfile):
+        (_gcam_rgn_translation, _) = util.rd_rgn_table(rtfile,fltconv=False)
+
+    ## drop list is also optional
+    dropfile = '%s/drop-regions.txt' % rgnconfig
+    if os.path.exists(dropfile):
+        with open(dropfile,'r') as df:
+            ## File has one name per line
+            for str in df:
+                _gcam_drop_regions.append(util.chomp(str))
+    ## if we have regions to drop, we should also remove them from _regions_ordered
+    for xrgn in _gcam_drop_regions:
+        try:
+            _regions_ordered.remove(xrgn)
+        except ValueError:
+            ## not an error if regions to be dropped were not included
+            ## in RgnNames.txt
+            pass 
 ##end    
     
 def rd_gcam_table(filename, njunk=0):
@@ -46,6 +79,11 @@ def rd_gcam_table(filename, njunk=0):
 
     Only some GCAM tables have this format.  Right now the ones that
     do include population and non-ag water withdrawals.
+
+    Note that this function both translates GCAM region abbreviations
+    and drops regions on the drop list.  Therefore, any function that
+    uses this one to read its GCAM data is covered on both of those
+    fronts.
 
     arguments:
        filename - The csv file to be read. 
@@ -58,7 +96,7 @@ def rd_gcam_table(filename, njunk=0):
         ## skip comment line
         file.readline()
 
-        ## check for 2100 column (which must be dropped)
+        ## read header line and check for 2100 column (which must be dropped)
         fields = util.rm_trailing_comma(file.readline()).split(',')
         if fields[-2]=='2100':
             rm2100 = True
@@ -72,7 +110,11 @@ def rd_gcam_table(filename, njunk=0):
             ## split off the first two columns
             linesplit = linefix.split(',',2+njunk)
 
-            region = linesplit[1] 
+            region = linesplit[1]
+            if region in _gcam_rgn_translation:
+                region = _gcam_rgn_translation[region]
+            if region in _gcam_drop_regions:
+                continue
             # trim the final (units) column.  Note that this will also
             # trim off the newline.
             data = (linesplit[-1].rpartition(','))[0]
@@ -100,12 +142,12 @@ def table_output_ordered(filename, table, incl_region=False, ordering=None):
 
          ordering - List of regions in the order that they should be
                     output.  Default = canonical ordering given in
-                    'regions_ordered'.
+                    '_regions_ordered'.
 
     """
 
     if ordering is None:
-        ordering = regions_ordered
+        ordering = _regions_ordered
 
     try: 
         with open(filename,"w") as file:
@@ -115,9 +157,9 @@ def table_output_ordered(filename, table, incl_region=False, ordering=None):
                 else:
                     file.write("%s\n" % table[region])
     except KeyError as e:
+        ## This is not necessarily an error.  Some regions may not
+        ## appear in certain tables.
         stderr.write('[table_output_ordered]: Region not found: %s\n' % e)
-        stderr.write('[table_output_ordered]: input table keys:\n\t%s\n' % table.keys())
-        raise e
     
     return
 
@@ -141,6 +183,8 @@ def proc_wdnonag(infile, outfile):
     table_output_ordered(outfile, table)
     return table
 
+## XXX This function will probably have to be performed in the
+## downscaling code.
 def proc_wdnonag_total(outfile, wddom, wdelec, wdmanuf, wdmining):
     """Sum the non-agricultural water demands to get total non-ag demand.
 
@@ -155,7 +199,7 @@ def proc_wdnonag_total(outfile, wddom, wdelec, wdmanuf, wdmining):
 
     """
     wdnonag = {}
-    for region in regions_ordered:
+    for region in _regions_ordered:
         dom    = map(float, wddom[region].split(','))
         elec   = map(float, wdelec[region].split(','))
         manuf  = map(float, wdmanuf[region].split(','))
@@ -165,6 +209,7 @@ def proc_wdnonag_total(outfile, wddom, wdelec, wdmanuf, wdmining):
         wdnonag[region] = ','.join(map(str,tot))
     table_output_ordered(outfile, wdnonag)
     return wdnonag 
+
 
 def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo):
     """Process GCAM population output.
@@ -196,7 +241,7 @@ def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo):
     for region in poptbl.keys():
         stderr.write('[proc_pop]: processing region: %s\n' % region)
         popvals   = poptbl[region].split(',')
-        benchmark = gis2000[region]
+        benchmark = _gis2000[region]
         fpop      = map(lambda x: str(1000*float(x)/benchmark), popvals)
         totpop    = map(lambda x: str(1000*float(x)), popvals)
 
@@ -262,6 +307,12 @@ def proc_wdlivestock(infilename, outfilename, rgnTotalFilename):
             fields = line.split(',',4) # leave the yearly data in one big string for a moment
             region = fields[1]
             sector = fields[3]
+
+            ## translate region abbreviations and drop unwanted regions
+            if region in _gcam_rgn_translation:
+                region = _gcam_rgn_translation[region]
+            if region in _gcam_drop_regions:
+                continue
             
             # now split yearly data into fields and convert to numeric
             data = fields[4].split(',') 
@@ -279,8 +330,15 @@ def proc_wdlivestock(infilename, outfilename, rgnTotalFilename):
     poultry = {}
     pig     = {}
     total_wd= {}
+
+    skiprgn = []                # regions with no livestock data
     ## loop over regions and compute the withdrawals for each livestock type
-    for region in regions_ordered:
+    for region in _regions_ordered:
+        if region not in _bfracFAO2005 and region not in _gfracFAO2005:
+            ## No livestock in this region
+            skiprgn.append(region)
+            continue
+            
         try:
             wdbeef = wdliv_table[(region,'Beef')]
         except KeyError: 
@@ -290,12 +348,12 @@ def proc_wdlivestock(infilename, outfilename, rgnTotalFilename):
         except KeyError:
             wddairy = [0]*nyear
         total_bovine    = map(lambda x,y: x+y, wdbeef, wddairy)
-        bfac            = bfracFAO2005[region]
+        bfac            = _bfracFAO2005[region]
         buffalo[region] = map(lambda x: bfac*x, total_bovine)
         cattle[region]  = map(lambda x: (1-bfac)*x, total_bovine)
 
         try:
-            gfac          = gfracFAO2005[region]
+            gfac          = _gfracFAO2005[region]
             sheepgoat     = wdliv_table[(region,"SheepGoat")]
             goat[region]  = map(lambda x: gfac*x, sheepgoat)
             sheep[region] = map(lambda x: (1-gfac)*x, sheepgoat)
@@ -329,16 +387,16 @@ def proc_wdlivestock(infilename, outfilename, rgnTotalFilename):
     ##   buffalo, cattle, goat, sheep, poultry, pig
     with open(outfilename,"w") as outfile:
         for table in [buffalo, cattle, goat, sheep, poultry, pig]:
-            wtbl_numeric(outfile, table)
+            wtbl_numeric(outfile, table, skiprgn=skiprgn)
 
     ## write the total water usage in another file
-    wtbl_numeric(rgnTotalFilename, total_wd)
+    wtbl_numeric(rgnTotalFilename, total_wd, skiprgn=skiprgn)
     ## end of write-out
 
     ## return the master table, in case we want to do something else with it
     return wdliv_table
 
-def wtbl_numeric(outfilein, table):
+def wtbl_numeric(outfilein, table, skiprgn=[]):
     """write a table of numeric values by region to a file as CSV data.
 
     arguments: 
@@ -366,7 +424,9 @@ def wtbl_numeric(outfilein, table):
         closeit = True
 
     try:
-        for region in regions_ordered:
+        for region in _regions_ordered:
+            if region in skiprgn:
+                continue
             outfile.write(','.join(map(lambda x: str(x), table[region])))
             outfile.write('\n') 
     finally:
@@ -405,7 +465,7 @@ def proc_irr_share(infilename, outfile):
     ## the table will default to 0.
     print 'irr share infile: %s' % infilename
     irr_share = {}
-    for region in regions_ordered:
+    for region in _regions_ordered:
         for crop in croplist:
             for aez in range(1,19):
                 irr_share[(region,crop,aez)] = [0] * 20
@@ -426,6 +486,12 @@ def proc_irr_share(infilename, outfile):
             region = fields.pop()
             aez    = int(fields[1])
 
+            ## translate region abbreviations and drop unwanted regions
+            if region in _gcam_rgn_translation:
+                region = _gcam_rgn_translation[region]
+            if region in _gcam_drop_regions:
+                continue
+
             irr_share[(region,crop,aez)] = fields # includes region, aez, crop at the beginning
                                                   # these columns are expected by the matlab code
                                                   
@@ -433,7 +499,7 @@ def proc_irr_share(infilename, outfile):
 
     ## We need to output this data, as well as using it for other calculations
     with open(outfile,"w") as outfile:
-        for region in regions_ordered:
+        for region in _regions_ordered:
             for aez in range(1,19):
                 for crop in croplist:
                     outfile.write(','.join(map(lambda x: str(x), irr_share[(region,crop,aez)])))
@@ -558,6 +624,12 @@ def read_gcam_ag_area(infilename, drop2100=True):
             datastr   = fields[3:lstfld]    # chop off units column and possibly 2100 column.
             data      = map(lambda s:float(s), datastr)
 
+            ## translate region abbreviations and drop unwanted regions
+            if rgntxt in _gcam_rgn_translation:
+                rgntxt = _gcam_rgn_translation[rgntxt]
+            if rgntxt in _gcam_drop_regions:
+                continue
+            
             ## split land area text to get crop, aez, and possibly irrigation status
             lamatch = lasplit.match(latxt)
             croptxt = lamatch.group(1)
@@ -567,7 +639,7 @@ def read_gcam_ag_area(infilename, drop2100=True):
                 irrstat = 'TOT' 
 
             ## convert region and crop to index numbers
-            rgnno   = regions_ordered.index(rgntxt)+1 
+            rgnno   = _regions_ordered.index(rgntxt)+1 
             try:
                 cropno = croplist.index(croptxt) + 1
             except ValueError as e:
@@ -614,7 +686,13 @@ def proc_ag_vol(infilename, outfilename):
                 sector  = fields[4]
                 data    = fields[5:-1]
 
-                rgnno    = regions_ordered.index(rgntxt) + 1
+                ## translate region abbreviations and drop unwanted regions
+                if rgntxt in _gcam_rgn_translation:
+                    rgntxt = _gcam_rgn_translation[rgntxt]
+                if rgntxt in _gcam_drop_regions:
+                    continue
+                
+                rgnno    = _regions_ordered.index(rgntxt) + 1
                 secmatch = lasplit.match(sector)
                 aezno    = int(secmatch.group(2))
                 try:

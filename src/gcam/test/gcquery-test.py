@@ -4,6 +4,7 @@ Usage:  gcquery-test.py <dbfile>
 """
 
 import sys
+import os.path
 
 ## set dbfile to use for testing
 try:
@@ -25,6 +26,8 @@ from gcam.water import waterdisag
 ## Set up the global parameters module (which is used by some of the
 ## utility functions).
 genparams = {"ModelInterface" : "./../../../../ModelInterface/ModelInterface.jar",
+             'inputdir' : './../../../input-data',
+             'rgnconfig' : 'rgnchn',
              "DBXMLlib" : "/homes/pralitp/libs/dbxml-2.5.16/install/lib"} 
 global_params = GlobalParamsModule({})
 for key in genparams.keys():
@@ -35,6 +38,9 @@ queryfiles = ['batch-land-alloc.xml', 'batch-population.xml', 'batch-water-ag.xm
               'batch-water-dom.xml', 'batch-water-elec.xml', 'batch-water-livestock.xml',
               'batch-water-mfg.xml', 'batch-water-mining-alt.xml']
 
+## set up the region tables for the waterdisag module
+rgnconfdir = os.path.join(genparams['inputdir'],genparams['rgnconfig'])
+waterdisag.init_rgn_tables(rgnconfdir)
 
 ## add the directory path to the query files
 querydir   = '../../../input-data/'
@@ -48,23 +54,19 @@ outfiles = map(lambda file: 'output/' + file, outfiles)
 
 of_new = util.gcam_query(queryfiles, dbfile, querydir, outfiles)
 
-## Just test the queries, not the processing.
-sys.exit(0)
-
-## TODO: test the output processing as well as the queries.
-
 ## process the non-ag water
 wd_dom  = waterdisag.proc_wdnonag('output/batch-water-dom.csv', 'output/final_wd_dom.csv')
 wd_elec = waterdisag.proc_wdnonag('output/batch-water-elec.csv', 'output/final_wd_elec.csv')
 wd_mfg  = waterdisag.proc_wdnonag('output/batch-water-mfg.csv', 'output/final_wd_mfg.csv')
 wd_min  = waterdisag.proc_wdnonag('output/batch-water-mining.csv', 'output/final_wd_mining.csv') 
-wd_tot  = waterdisag.proc_wdnonag_total('output/final_wd_total.csv', wd_dom, wd_elec, wd_mfg, wd_min)
+#####wd_tot  = waterdisag.proc_wdnonag_total('output/final_wd_total.csv', wd_dom, wd_elec, wd_mfg, wd_min)
 
 ## process livestock water demand
-wd_liv  = waterdisag.proc_wdlivestock('output/batch-water-livestock.csv', 'output/final_wd_liv.csv')
+wd_liv  = waterdisag.proc_wdlivestock('output/batch-water-livestock.csv', 'output/final_wd_liv.csv',
+                                      'output/rgn_tot_withd_liv.csv')
 
 ## process ag water demand
-irrS    = waterdisag.proc_irr_share('input-data/irrigation-frac.csv', 'output/irrS.csv')
+irrS    = waterdisag.proc_irr_share('output/irrigation-frac.csv', 'output/irrS.csv')
 ## no tables returned by these next two.  Maybe we should return them for consistency?
 waterdisag.proc_ag_area('output/batch-land-alloc.csv', 'output/final_ag_area.csv')
 waterdisag.proc_ag_vol('output/batch-water-ag.csv', 'output/final_wd_ag.csv')

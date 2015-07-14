@@ -252,24 +252,17 @@ def rewrite_query(query, dbxml, inputdir, outfile):
         
 ## regex for removing trailing commas
 ## TODO:  Do we need to remove multiple trailing commas?
-trlcomma = re.compile(r',\s*$')
+_trlcomma = re.compile(r',\s*$')
 def rm_trailing_comma(line):
     """Remove trailing comma, if any, from a string."""
-    return trlcomma.sub('',line)
+    return _trlcomma.sub('',line)
 
-## remove trailing newline
-## TODO:  why don't we use a regular expression for this?
-def chomp(string):
-    """Remove trailing newlines, if any, from a string."""
-    ## search for last non-newline
-    i = -1
-    while string[i] == '\n':
-        i -= 1
-    i += 1                      # forward to the first newline
-    if i<0:
-        return string[:i]
-    else:
-        return string
+## remove trailing whitespace
+## TODO:  this could probably be merged with the function above
+_trlspc = re.compile(r'\s*$')
+def chomp(astring):
+    """Remove trailing whitespace, if any, from a string."""
+    return _trlspc.sub('',astring)
 
 def allexist(files):
     """Test a list of files to determine whether all exist."""
