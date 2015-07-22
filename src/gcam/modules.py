@@ -24,9 +24,16 @@ HistoricalHydroModule - Run the historical hydrology calculation.
 WaterDisaggregationModule - Run the water disaggregation calculation.
 
 NetcdfDemoModule  - Package outputs into a netCDF file for the 
-                    February 2015 demo.
+                    Decision Theater Demo.
 
 """
+
+## TODO: many of these classes have gotten a bit long.  It would be
+## better to refactor them so that the main functionality is
+## implemented in a separate python module for each GCAM module, with
+## the GCAM module subclass providing a thin wrapper that grabs inputs
+## needed from other modules and passes them to a main function in the
+## relevant python module.
 
 import os
 import os.path
@@ -239,6 +246,8 @@ class GcamModuleBase(object):
         self.params[key] = value
 
     def runmod(self):
+        """Subclasses of GcamModuleBase are required to override this method."""
+
         raise NotImplementedError("GcamModuleBase is not a runnable class.") 
 
 
@@ -849,11 +858,6 @@ class WaterDisaggregationModule(GcamModuleBase):
             inputdir = genparams['inputdir']
         print '[WaterDisaggregationModule]: inputdir = %s' % inputdir
 
-        ## The mapping between grid cells and regions is fixed by the
-        ## choice of region map directory.  This is so that all
-        ## modules will see a consistent view of the region mapping.
-        gridrgn = util.abspath('newgrd_GCAM.csv',rgnconfig)
-        
         ## Parse the water transfer parameters.
         if 'water-transfer' in self.params:
             transfer      = util.parseTFstring(self.params['water-transfer'])
@@ -935,7 +939,6 @@ class WaterDisaggregationModule(GcamModuleBase):
         wdelec  = waterdisag.proc_wdnonag(outfiles[4], tempdirprep("withd_elec.csv"))
         wdman   = waterdisag.proc_wdnonag(outfiles[6], tempdirprep("withd_mfg.csv"))
         wdmin   = waterdisag.proc_wdnonag(outfiles[7], tempdirprep("withd_min.csv"))
-        wdnonag = waterdisag.proc_wdnonag_total(tempdirprep("withd_nonAg.csv"), wddom, wdelec, wdman, wdmin)
 
         ## population data
         waterdisag.proc_pop(outfiles[1], tempdirprep("pop_fac.csv"), tempdirprep("pop_tot.csv"), pop_demo_file)
@@ -956,13 +959,12 @@ class WaterDisaggregationModule(GcamModuleBase):
         else:
             read_irrS = 0
 
-        
         ## Run the disaggregation model
         if transfer:
             tflag = 1
         else:
             tflag = 0
-        matlabfn = "run_disaggregation('%s','%s','%s','%s', '%s', '%s','%s','%s', '%s', %d, '%s', %d);" % (runoff_file, chflow_file,basinqfile,rgnqfile,  gridrgn, tempdir, outputdir, scenariotag,runid, tflag, transfer_file, read_irrS)
+        matlabfn = "run_disaggregation('%s','%s','%s','%s', '%s', '%s','%s','%s', '%s', %d, '%s', %d);" % (runoff_file, chflow_file,basinqfile,rgnqfile,  rgnconfig, tempdir, outputdir, scenariotag,runid, tflag, transfer_file, read_irrS)
         print 'current dir: %s ' % os.getcwd()
         print 'matlab fn:  %s' % matlabfn
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:

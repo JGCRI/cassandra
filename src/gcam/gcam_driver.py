@@ -3,6 +3,10 @@
 
   usage:  gcam_driver.py <configfile>
 
+  This program will run the GCAM automation system using the configuration details
+  from the configuration file described on the command line.  The configuraiton
+  file format and contents are described in the GCAM Automation Users' Guide.
+  
 """ 
 
 import re

@@ -135,7 +135,9 @@ def table_output_ordered(filename, table, incl_region=False, ordering=None):
     arguments:
          filename - Name of intended output file.
 
-            table - Output table to reorder (e.g. output of proc_wdnonag)
+            table - Output table to reorder (e.g. output of
+                    proc_wdnonag).  Contents of table should be a string with
+                    the list of values in it.
 
       incl_region - Flag: True = output region names in first columns;
                     False = don't.  Default: False
@@ -149,18 +151,20 @@ def table_output_ordered(filename, table, incl_region=False, ordering=None):
     if ordering is None:
         ordering = _regions_ordered
 
-    try: 
-        with open(filename,"w") as file:
-            for region in ordering:
-                if incl_region:
-                    file.write("%s,%s\n" % (region, table[region]))
-                else:
-                    file.write("%s\n" % table[region])
-    except KeyError as e:
-        ## This is not necessarily an error.  Some regions may not
-        ## appear in certain tables.
-        stderr.write('[table_output_ordered]: Region not found: %s\n' % e)
+        
+    rowlen = len(next(table.itervalues()).split())
     
+    with open(filename,"w") as file:
+        for region in ordering:
+            if region in table:
+                row = table[region]
+            else:
+                row = ','.join(['0']*rowlen)
+                
+            if incl_region:
+                file.write("%s,%s\n" % (region, row))
+            else:
+                file.write("%s\n" % row) 
     return
 
 
@@ -182,33 +186,6 @@ def proc_wdnonag(infile, outfile):
     table = rd_gcam_table(infile,2)
     table_output_ordered(outfile, table)
     return table
-
-## XXX This function will probably have to be performed in the
-## downscaling code.
-def proc_wdnonag_total(outfile, wddom, wdelec, wdmanuf, wdmining):
-    """Sum the non-agricultural water demands to get total non-ag demand.
-
-    arguments:
-        outfile - Name of output file
-          wddom - Domestic water demand table
-         wdelec - Electric generation water demand table
-        wdmanuf - Manufacturing water demand table
-       wdmining - Mining water demand table
-
-    return value: Total non-ag water demand table.
-
-    """
-    wdnonag = {}
-    for region in _regions_ordered:
-        dom    = map(float, wddom[region].split(','))
-        elec   = map(float, wdelec[region].split(','))
-        manuf  = map(float, wdmanuf[region].split(','))
-        mining = map(float, wdmining[region].split(','))
-
-        tot = map(lambda d,e,ma,mi: d+e+ma+mi , dom, elec, manuf, mining)
-        wdnonag[region] = ','.join(map(str,tot))
-    table_output_ordered(outfile, wdnonag)
-    return wdnonag 
 
 
 def proc_pop(infile, outfile_fac, outfile_tot, outfile_demo):
@@ -278,9 +255,9 @@ def proc_wdlivestock(infilename, outfilename, rgnTotalFilename):
     between buffalo and cattle.  SheepGoat are apportioned between
     sheep and goats, and Poultry and Pork map onto poultry and pig,
     respectively.  The coefficients for apportioning the Beef/Dairy
-    and SheepGoat sectors are given by region in the tables in
-    waterdisag.py.  These are determined from base year data and are
-    assumed to be fixed over time.
+    and SheepGoat sectors are given by region in tables supplied as
+    part of the input data.  These are determined from base year data
+    and are assumed to be fixed over time.
 
     """
     
@@ -444,7 +421,7 @@ croplist = ["Corn", "biomass", "FiberCrop", "MiscCrop", "OilCrop", "OtherGrain",
             "PalmFruit"]
 
 ## some crops are to be treated as generic "biomass"
-biomasslist = ["eucalyptus", "Jatropha", "miscanthus", "willow", "biomassOil"]
+_biomasslist = ["eucalyptus", "Jatropha", "miscanthus", "willow", "biomassOil"]
 
 def proc_irr_share(infilename, outfile):
     """Read the irrigation share table.  
@@ -466,9 +443,11 @@ def proc_irr_share(infilename, outfile):
     print 'irr share infile: %s' % infilename
     irr_share = {}
     for region in _regions_ordered:
+        rgnno   = _regions_ordered.index(region)+1 
         for crop in croplist:
+            cropno = find_cropno(crop) 
             for aez in range(1,19):
-                irr_share[(region,crop,aez)] = [0] * 20
+                irr_share[(region,crop,aez)] = [rgnno, aez, cropno] + ([0] * 20)
     years = range(2005,2100,5)
     years.insert(0,1990)
 
@@ -494,10 +473,10 @@ def proc_irr_share(infilename, outfile):
 
             irr_share[(region,crop,aez)] = fields # includes region, aez, crop at the beginning
                                                   # these columns are expected by the matlab code
-                                                  
     ## end of file read
 
     ## We need to output this data, as well as using it for other calculations
+    stdout.write('irr share outfile:  %s\n' % outfile)
     with open(outfile,"w") as outfile:
         for region in _regions_ordered:
             for aez in range(1,19):
@@ -507,11 +486,11 @@ def proc_irr_share(infilename, outfile):
             
 ## end of irrigation share reader
 
-lasplit = re.compile(r'([a-zA-Z_ ]+)AEZ([0-9]+)(IRR|RFD)?')
+_lasplit = re.compile(r'([a-zA-Z_ ]+)AEZ([0-9]+)(IRR|RFD)?')
 def proc_ag_area(infilename, outfilename,drop2100=True):
-    """read in the agricultural area data, reformat, and write out
+    """Read in the agricultural area data, reformat, and write out.
 
-    The output we want is:
+    The output needed by the matlab disaggregation code is:
       region-number, aez-number, crop-number, 1990, 2005, 2010, ..., 2095
 
     Furthermore, if GCAM produced separate totals for irrigated and
@@ -631,7 +610,7 @@ def read_gcam_ag_area(infilename, drop2100=True):
                 continue
             
             ## split land area text to get crop, aez, and possibly irrigation status
-            lamatch = lasplit.match(latxt)
+            lamatch = _lasplit.match(latxt)
             croptxt = lamatch.group(1)
             aezno   = int(lamatch.group(2))
             irrstat = lamatch.group(3)
@@ -639,15 +618,8 @@ def read_gcam_ag_area(infilename, drop2100=True):
                 irrstat = 'TOT' 
 
             ## convert region and crop to index numbers
-            rgnno   = _regions_ordered.index(rgntxt)+1 
-            try:
-                cropno = croplist.index(croptxt) + 1
-            except ValueError as e:
-                if croptxt in biomasslist:
-                    cropno = croplist.index("biomass") + 1
-                else:
-                    raise
-
+            rgnno   = _regions_ordered.index(rgntxt)+1
+            cropno  = find_cropno(croptxt) 
             table[(rgnno,aezno,cropno,irrstat)] = data
 
         return table 
@@ -655,11 +627,11 @@ def read_gcam_ag_area(infilename, drop2100=True):
 def proc_ag_vol(infilename, outfilename):
     """Read in volume of water used by agriculture, reformat, and write out.  
 
-    This function is similar to the previous one, but just different
+    This function is similar to proc_ag_area, but just different
     enough that we can't reuse the same function.  The input format
     is: 
        scenario, region (text), crop (text), input, sector (crop+AEZ), 1990, 2005, 2010, ..., 2095, units
-    The output format is:
+    The format required by the matlab code is:
       region-number, aez-number, crop-number, 1990, 2005, 2010, ..., 2095
 
     Arguments:
@@ -693,12 +665,12 @@ def proc_ag_vol(infilename, outfilename):
                     continue
                 
                 rgnno    = _regions_ordered.index(rgntxt) + 1
-                secmatch = lasplit.match(sector)
+                secmatch = _lasplit.match(sector)
                 aezno    = int(secmatch.group(2))
                 try:
                     cropno   = croplist.index(croptxt) + 1
                 except ValueError as e:
-                    if croptxt in biomasslist:
+                    if croptxt in _biomasslist:
                         cropno = croplist.index('biomass')
                     else:
                         raise
@@ -711,3 +683,23 @@ def proc_ag_vol(infilename, outfilename):
                 outfile.write(','.join(map(str,data)))
                 outfile.write('\n')
 ## end of proc_ag_vol
+
+
+def find_cropno(crop):
+    """Find the crop number corresponding to the input crop name.
+
+    For the most part, the result of this function is just the
+    unit-offset index of the crop in the crop list; however, certain
+    crops are mapped to "biomass".  For these, the index of the
+    biomass entry in the crop list is returned.
+    
+    """
+    
+    try:
+        cropno = croplist.index(crop) + 1
+    except ValueError as e:
+        if crop in _biomasslist:
+            cropno = croplist.index("biomass") + 1
+        else:
+            raise
+    return cropno

@@ -85,8 +85,8 @@ def scenariofix(line, newstr="scenario", pat=scen_pattern):
     CSV files returned from the model interface frequently have a
     scenario name as the first field.  The scenario name invariably
     has a comma in it, which really messes up splitting on commas.  We
-    almost never use the scenario name for anything, so it's best to
-    transform it to something benign.
+    almost never use the scenario name for anything, so this function
+    transforms it to something benign.
 
     arguments:
         line   - Line of text read from a GCAM csv output file. 
