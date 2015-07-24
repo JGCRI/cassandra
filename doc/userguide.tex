@@ -1,0 +1,149 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath}
+
+\title{{GCAM} Automation System Users' Guide}
+
+\begin{document}
+
+\maketitle
+
+\section{Overview}
+The GCAM automation system is intended to provide a way to run all the
+steps of a GCAM analysis using a single command.  Such an analysis
+might include several data preprocessing steps, a run of the GCAM core
+model, and several data postprocessing steps.  The steps (called
+``modules'' throughout this documentation) to be performed are laid
+out in a configuration file, the format of which is designed to be
+easily edited by hand or by an automated process (such as a graphical
+front end).  The system deduces dependencies between modules based on
+patterns of data use, and modules are run concurrently where possible.
+
+
+\section{Installation and Setup}
+\subsection{System Requirements}
+
+The GCAM automation system has been developed and tested on Linux and
+on OS~X.  The code is written portably in Python, so any version of
+those operating systems from the past few years should work.  The code
+requires Python~2.7.  Due to backward incompatibilities in Python~3.X,
+later versions of the Python interpreter will \emph{not} work.
+
+Output in NetCDF format requires the NetCDF-3 libraries.  These
+libraries are available from Unidata (\texttt{unidata.ucar.edu}).
+
+The modules that run GCAM analyses are distributed separately in their
+own repositories.  In addition to run them you will need to install
+the code for all of the modules you wish to run.  The FY-15 demos use
+the GCAM core model and the hydrology and water downscaling code.
+Both of these are distributed by PNNL.  The GCAM core model is a
+stand-alone program, while the hydrology and water downscaling code
+requires a copy of Matlab.
+
+\subsection{How to install}
+
+The GCAM automation system is hosted on GitHub and can be downloaded
+from:\\
+\texttt{https://github.com/JGCRI/gcam-driver}\\
+The release used for FY15 runs for the Foresight project is
+version~0.2.  To install the code download this release and unpack it
+in the directory of your choice.  If you wish to produce netCDF
+outputs, make sure the netCDF-3 libraries are installed, and set the
+\texttt{NETCDF_INCDIR} environment variable to the location of the
+netCDF include files, and the \texttt{NETCDF_LIBDIR} to the location
+of the netCDF libraries.  Then, from the \texttt{src/C} subdirectory
+of the release, run \texttt{make mat2nc} to build the netCDF
+converter.
+
+\section{How to run}
+
+In order to run a GCAM calculation using the automation system, you
+must first prepare a configuration file describing the GCAM modules to
+include.  The configuration file is divided into sections, with each
+section corresponding to a module.  The section begins with the name
+of the module enclosed in square brackets and consists of a series of
+key-value pairs separated by an $=$ sign.  Each module has its own set
+of parameter options, which are explained below.  An example configuration
+file is included with the code in the \texttt{example.cfg} file.
+
+\subsection{The Global Module}
+The Global module provides parameter values that will be used by multiple
+other modules.  Most of these values are related to the locations of
+files used to access GCAM data.  The name of this module is
+\texttt{[Global]}.
+\begin{description}
+\item[ModelInterface] The location of the \texttt{ModelInterface.jar}
+  Java file.  This will have been installed along with the GCAM core
+  model.
+\item[DBXMLlib] The location of the DBXML libraries.  These were also
+  installed with the GCAM core model.
+\item[inputdir] The location of the gcam-driver input data.  For now,
+  this is always \texttt{./input-data}.  It is included as a settable
+  parameter to allow for future expansion.
+\item[rgnconfig] The directory containing the files that describe how
+  the world is divided up into regions.  This directory path is
+  relative to the directory specified for \texttt{inputdir}.  There
+  are currently three to choose from:  \texttt{rgn14}, \texttt{rgn32},
+  and \texttt{rgnchn}.
+\end{description}
+
+\subsection{The Hydrology Module}
+The Hydrology module runs the hydrology for the future scenario and
+makes the results available to other modules.  The name of the module
+is \texttt{[HydroModule]}
+\begin{description}
+\item[workdir] The working directory for the hydrology calculation.
+  Generally, this is the location where the gcam-hydro code is
+  installed.
+\item[inputdir] Location of the CMIP5 model output used as input by the
+  hydrology calculation.
+\item[outputdir] Directory into which to write the module's output
+  data.
+\item[init-storage-file] File giving the initial condition for the
+  water stored in the soil column.  This file is included with the
+  gcam-hydro distribution, but it can be replaced if something better
+  is available.
+\item[logfile] File into which to write screen output from the matlab
+  code.  This is mostly intended for debugging problems with the
+  matlab calculation.
+\item[gcm] The name of the earth system model to run the hydrology
+  on.  This will be used to construct the name of both the input and
+  output files.
+\item[scenario] The RCP scenario to use for the calculation.  This
+  will also be a component in the input and output file names.
+\item[runid] The ensemble ID and start and end months for the input
+  CMIP5 data.  This will be used to identify the correct input files
+  in the CMIP5 data directory.
+\item[clobber] Either ``True'' or ``False''.  If False, then the code
+  will check to see whether the anticipated results already exist.  If
+  the do, then the hydrology calculation will not run; the preexisting
+  results will be used.  If True, then the hydrology calculation will
+  overwrite the preexisting results, if any.
+\end{description}
+
+\subsection{The Historical Hydrology Module}
+
+Once the configuration file has been prepared, the program can be run
+from the command line by changing to the 
+top-level gcam-driver directory and running:\\
+\texttt{./gcam-driver <configfile>}\\ 
+
+
+\appendix
+\section{Technical Reference}
+Technical details for the python modules that make up the GCAM
+automation system can be obtained by using the \texttt{pydoc} command
+included with most python distributions.  For this to work the
+PYTHONPATH environment variable must include the \texttt{src}
+directory of the \texttt{gcam-driver} installation.  For csh-type
+command shells this can be accomplished by running:\\ 
+\texttt{setenv PYTHONPATH /path/to/gcam-driver/src}\\
+For bourne-type shells the command is:\\
+\texttt{export PYTHONPATH=/path/to/gcam-driver/src}.
+
+The information given in the pydoc documentation pertains mostly to
+the internals of the GCAM automation system, including function
+arguments and return values and descriptions of internal data
+structures.  It will therefore be useful primarily to users interested
+in extending the system.
+
+\end{document}
