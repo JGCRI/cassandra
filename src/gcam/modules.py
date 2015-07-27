@@ -1007,7 +1007,7 @@ class NetcdfDemoModule(GcamModuleBase):
 
         rcp = self.params['rcp']
         pop = self.params['pop']
-        gdp = self.params['gdp']
+        gdp = 10.0              # Dummy value; we didn't implement the GDP scenarios.
         outfile = self.params['outfile']
         mat2nc  = util.abspath(self.params['mat2nc'],os.getcwd())
         
