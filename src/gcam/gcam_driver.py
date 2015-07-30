@@ -5,6 +5,7 @@
 
 """ 
 
+import sys
 import re
 import threading
 
@@ -89,8 +90,11 @@ if __name__ == "__main__":
     sys.path.append(os.getcwd()+'/src')
     from gcam.modules import *
 
-    
-    (modlist, cap_table) = gcam_parse(sys.argv[1])
+    try:
+        (modlist, cap_table) = gcam_parse(sys.argv[1])
+    except IndexError:
+        print __doc__
+        sys.exit(0)
 
     ## We will look up "global" in the cap_table and process any
     ## global parameters here, but in the current version we don't
