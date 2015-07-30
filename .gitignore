@@ -48,6 +48,9 @@ model_interface.properties
 run-config/
 lamp-inputs/
 
+# Batch scripts
+run-*.zsh
+
 
 # original query file
 Main_queries_water.xml
