@@ -505,13 +505,13 @@ class HydroModule(GcamModuleBase):
 
         """
         
-        workdir  = self.params["workdir"]
-        inputdir = self.params["inputdir"] # input data from GCM
-        outputdir = self.params["outputdir"] # destination for output files
+        workdir  = util.abspath(self.params["workdir"])
+        inputdir = util.abspath(self.params["inputdir"]) # input data from GCM
+        outputdir = util.abspath(self.params["outputdir"]) # destination for output files
         gcm      = self.params["gcm"]
         scenario = self.params["scenario"]
         runid    = self.params["runid"] # identifier for the GCM ensemble member
-        logfile  = self.params["logfile"]
+        logfile  = util.abspath(self.params["logfile"])
         try:
             startmonth = int(self.params['startmonth'])
         except KeyError:
@@ -520,12 +520,13 @@ class HydroModule(GcamModuleBase):
 
         ## get initial channel storage from historical hydrology
         ## module if available, or from self-parameters if not
-        ## XXX Should the self-parameters override the module or vice versa?
         if 'historical-hydro' in self.cap_tbl:
             hist_rslts = self.cap_tbl['historical-hydro'].fetch()
             initstorage = hist_rslts['chstorfile']
         else:
-            initstorage = self.params["init-storage-file"] # matlab data file containing initial storage
+            ## matlab data file containing initial storage -- used
+            ## only if no historical hydro module.
+            initstorage = util.abspath(self.params["init-storage-file"]) 
 
         
         if inputdir[-1] != '/':
@@ -671,13 +672,13 @@ class HistoricalHydroModule(GcamModuleBase):
         failure.
 
         """
-        workdir   = self.params['workdir']
-        inputdir  = self.params['inputdir'] 
-        outputdir = self.params['outputdir']
+        workdir   = util.abspath(self.params['workdir'])
+        inputdir  = util.abspath(self.params['inputdir'])
+        outputdir = util.abspath(self.params['outputdir'])
         gcm       = self.params['gcm']
         scenario  = 'historical'
         runid     = self.params['runid']
-        logfile   = self.params['logfile']
+        logfile   = util.abspath(self.params['logfile'])
         try:
             startmonth = int(self.params['startmonth'])
         except KeyError:

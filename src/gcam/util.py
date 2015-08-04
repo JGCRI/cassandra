@@ -277,8 +277,9 @@ def abspath(filename,defaultpath=None, tag=None):
     """Convert a filename to an absolute path.
 
     Names starting with '/' are returned unchanged.  Names beginning
-    with './' are assumed to be relative to the current directory.
-    All others are assumed to be relative to a supplied default.
+    with './' or '../' are always assumed to be relative to the current
+    directory.  All others are assumed to be relative to a supplied
+    default, or to the current directory if none is supplied.
 
     Arguments:
          filename - filename to convert 
@@ -293,10 +294,7 @@ def abspath(filename,defaultpath=None, tag=None):
 
     if filename[0] == '/':
         return filename
-    elif filename[0:2] == './':
-        return '%s/%s' % (os.getcwd(),filename[2:])
-    elif defaultpath is None:
-        raise RuntimeError('Error: generating absolute file path for %s.  No default directory for this parameter; filename must be absolute path or relative to ./'
-                               % filename)
+    elif defaultpath is None or filename[0:2] == './' or filename[0:3]=='../':
+        return os.path.abspath(filename)
     else:
-        return '%s/%s' % (defaultpath,filename)
+        return os.path.join(defaultpath,filename)
