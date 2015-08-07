@@ -46,6 +46,8 @@ model_interface.properties
 
 # Configurations for runs
 run-config/
+runconfig/
+batchfiles/
 lamp-inputs/
 
 # Batch scripts

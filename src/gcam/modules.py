@@ -377,7 +377,7 @@ class GcamModule(GcamModuleBase):
         ## usually the exe, cfg, and logcfg files will be in the same
         ## directory, but in case of difference, take the location of
         ## the config file as controlling.
-        self.workdir = os.path.dirname(cfg)
+        self.workdir = os.path.dirname(exe)
 
         msgpfx = "GcamModule: "    # prefix for messages coming out of this module
         ## Do some basic checks:  do these files exist, etc.
@@ -523,10 +523,14 @@ class HydroModule(GcamModuleBase):
         if 'historical-hydro' in self.cap_tbl:
             hist_rslts = self.cap_tbl['historical-hydro'].fetch()
             initstorage = hist_rslts['chstorfile']
+            self.results['hist-fout'] = hist_rslts['foutfile']
+            self.results['hist-qout'] = hist_rslts['qoutfile']
         else:
             ## matlab data file containing initial storage -- used
             ## only if no historical hydro module.
             initstorage = util.abspath(self.params["init-storage-file"]) 
+            self.results['hist-fout'] = '/dev/null'
+            self.results['hist-qout'] = '/dev/null'
 
         
         if inputdir[-1] != '/':
@@ -600,7 +604,7 @@ class HydroModule(GcamModuleBase):
 
         ## Get the location of the region mapping file.
         genparams = self.cap_tbl['general'].fetch()
-        gridrgn   = util.abspath('newgrd_GCAM.csv',genparams['rgnconfig'])
+        gridrgn   = util.abspath('grid2rgn_nonag.csv',genparams['rgnconfig'])
         
         ## Run the matlab code.
         ## TODO: eventually we need to move away from matlab, as it is not a
@@ -616,8 +620,8 @@ class HydroModule(GcamModuleBase):
         ## of the cfoofile filenames the same way.
         print 'Running the matlab hydrology code'
         with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
-            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_future_hydro('%s','%s','%s','%s','%s', %d, '%s','%s','%s', '%s','%s');exit" %
+            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread','-r', 
+                       "run_future_hydro('%s','%s','%s','%s','%s', %d, '%s','%s','%s', '%s','%s', '/dev/null');exit" %
                        (prefile,tempfile,dtrfile,initstorage,gridrgn, startmonth, qoutfile,foutfile,petoutfile, basinqfile,rgnqfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
                                   cwd=workdir)
@@ -732,7 +736,7 @@ class HistoricalHydroModule(GcamModuleBase):
 
         ## Get the location of the region mapping file.
         genparams = self.cap_tbl['general'].fetch()
-        gridrgn   = util.abspath('newgrd_GCAM.csv',genparams['rgnconfig'],'HistoricalHydroModule')
+        gridrgn   = util.abspath('grid2rgn_nonag.csv',genparams['rgnconfig'],'HistoricalHydroModule')
         print '[HistoricalHydroModule]: gridrgn = %s ' % gridrgn
         print '[HistoricalHydroModule]: rgnconfig = %s ' % genparams['rgnconfig']
         
@@ -741,8 +745,8 @@ class HistoricalHydroModule(GcamModuleBase):
         ## module.
         print 'Running historical hydrology for gcm= %s   runid= %s' % (gcm, runid)
         with open(logfile,'w') as logdata, open('/dev/null','r') as null:
-            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-r',
-                       "run_historical_hydro('%s', '%s', '%s', '%s', %d, '%s', '%s','%s', '%s', '%s', '%s');exit" %
+            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread','-r',
+                       "run_historical_hydro('%s', '%s', '%s', '%s', %d, '%s', '%s','%s', '%s', '%s', '%s', '/dev/null');exit" %
                        (prefile, tempfile, dtrfile, gridrgn, 1, chstorfile, qoutfile, foutfile,petoutfile, basinqtblfile, rgnqtblfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
                                   cwd=workdir)
@@ -846,10 +850,12 @@ class WaterDisaggregationModule(GcamModuleBase):
         basinqfile    = hydro_rslts["basinqfile"]
         rgnqfile      = hydro_rslts["rgnqfile"]
         runid         = hydro_rslts["runid"]
-        dbxmlfile     = gcam_rslts["dbxml"]
-        outputdir     = self.params["outputdir"]
-        tempdir       = self.params["tempdir"]  # location for intermediate files produced by dbxml queries
+        dbxmlfile     = util.abspath(gcam_rslts["dbxml"])
+        outputdir     = util.abspath(self.params["outputdir"])
+        tempdir       = util.abspath(self.params["tempdir"])  # location for intermediate files produced by dbxml queries
         scenariotag   = self.params["scenario"]
+        hist_chflow_file = hydro_rslts['hist-fout']
+        hist_runoff_file = hydro_rslts['hist-qout']
 
         rgnconfig = genparams['rgnconfig']
 
@@ -965,11 +971,12 @@ class WaterDisaggregationModule(GcamModuleBase):
             tflag = 1
         else:
             tflag = 0
-        matlabfn = "run_disaggregation('%s','%s','%s','%s', '%s', '%s','%s','%s', '%s', %d, '%s', %d);" % (runoff_file, chflow_file,basinqfile,rgnqfile,  rgnconfig, tempdir, outputdir, scenariotag,runid, tflag, transfer_file, read_irrS)
+        matlabfn = "run_disaggregation('%s', '%s', '%s','%s','%s','%s', '%s', '%s','%s','%s', '%s', %d, '%s', %d);" % (runoff_file, chflow_file, hist_runoff_file, hist_chflow_file, basinqfile,rgnqfile,  rgnconfig, tempdir, outputdir, scenariotag,runid, tflag, transfer_file, read_irrS)
         print 'current dir: %s ' % os.getcwd()
         print 'matlab fn:  %s' % matlabfn
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:
-            arglist = ["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r", matlabfn]
+            arglist = ["matlab", "-nodisplay", "-nosplash", "-nodesktop", '-singleCompThread',"-r", 
+                        matlabfn]
 
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
                                   cwd=workdir) 
@@ -1022,13 +1029,13 @@ class NetcdfDemoModule(GcamModuleBase):
             cfgfile.write('%s\n%s\n%s\n' % (rcp, pop, gdp))
             cfgfile.write('%s\n' % outfile)
             if transfer:
-                cfgfile.write('/lustre/data/rpl/gcam-driver/output/cmip5/no-data.dat\n')
+                cfgfile.write('no-data\n')
             else:
                 cfgfile.write('%s\n' % chflow_file)
             for var in ['wdirr', 'wdliv', 'wdelec', 'wdmfg', 'wdtotal', 'wddom', 'wsi']:
                 if transfer:
                     ## for water transfer cases, we don't have any gridded data, so substitute a grid full of NaN.
-                    cfgfile.write('/lustre/data/rpl/gcam-driver/output/cmip5/no-data.dat\n')
+                    cfgfile.write('no-data\n')
                 else:
                     cfgfile.write('%s\n' % water_rslts[var])
             cfgfile.write('%s\n' % water_rslts['pop-demo'])

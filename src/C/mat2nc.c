@@ -639,12 +639,22 @@ int read_and_aggregate_data(const char *filename, datasliceptr data)
   int year, iyear, imonth, ilat, ilon, i;
   float fac;
   size_t nread;
-  FILE *infile = fopen(filename,"rb");
+  FILE *infile;
   /* The input data is organized as data[t][lon][lat], so we need some buffers
      for reorganizing it */
   static float readdata[12][NLON*NLAT]; /* read buffer */
   static float transdata[NLON*NLAT];      /* transpose buffer */
 
+  if(strcmp(filename,"no-data")==0) {
+    /* fill array with NaN */
+    for(iyear=0;iyear<NYEAR;++iyear)
+      for(ilat=0;ilat<NLAT;++ilat)
+        for(ilon=0;ilon<NLON; ++ilon)
+          data[iyear][ilat][ilon] = NAN;
+    return 0;
+  }
+  
+  infile  = fopen(filename,"rb");
   if(!infile) {
     fprintf(stderr,"Unable to open file %s\n", filename);
     return 1;
@@ -718,6 +728,15 @@ int read_5yr_data(const char *filename, datasliceptr data, int nskipyr)
   int iyear, ilat, ilon, nread;
   static float readdata[NYEAR][NLON*NLAT]; /* read buffer */
 
+  if(strcmp(filename,"no-data")==0) {
+    /* fill array with NaN */
+    for(iyear=0;iyear<NYEAR;++iyear)
+      for(ilat=0;ilat<NLAT;++ilat)
+        for(ilon=0;ilon<NLON; ++ilon)
+          data[iyear][ilat][ilon] = NAN;
+    return 0;
+  }
+  
   datafile = fopen(filename, "rb");
   if(!datafile) {
     fprintf(stderr,"Unable to open file %s for input.\n",filename);

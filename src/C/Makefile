@@ -1,6 +1,6 @@
 OPT    =  -O3 -g
-CFLAGS = $(OPT) -I$(NETCDF_INCDIR) -std=c99 
-LDFLAGS = -L$(NETCDF_LIBDIR) -Wl,-rpath,$(NETCDF_LIBDIR)
+CFLAGS = $(OPT) -I$(NETCDF_INCLUDE) -std=c99 
+LDFLAGS = -L$(NETCDF_LIB) -Wl,-rpath,$(NETCDF_LIB)
 LIBS   = -lnetcdf -lm
 
 
