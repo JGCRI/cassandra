@@ -518,6 +518,9 @@ class HydroModule(GcamModuleBase):
             startmonth = 1      # Default is to start at the beginning of the year
         print '[HydroModule]: start month = %d' % startmonth
 
+        ## ensure that output directory exists
+        util.mkdir_if_noexist(outputdir)
+
         ## get initial channel storage from historical hydrology
         ## module if available, or from self-parameters if not
         if 'historical-hydro' in self.cap_tbl:
@@ -689,6 +692,9 @@ class HistoricalHydroModule(GcamModuleBase):
             startmonth = 1      # Default is January
         print '[HistoricalHydroModule]: start month = %d' % startmonth
 
+        ## ensure output directory exists
+        util.mkdir_if_noexist(outputdir)
+
         if inputdir[-1] != '/':
             inputdir = inputdir + '/'
         if outputdir[-1] != '/':
@@ -859,6 +865,10 @@ class WaterDisaggregationModule(GcamModuleBase):
 
         rgnconfig = genparams['rgnconfig']
 
+        ## ensure that output and temp directories exist
+        util.mkdir_if_noexist(outputdir)
+        util.mkdir_if_noexist(tempdir)
+
         if 'inputdir' in self.params:
             inputdir = self.params['inputdir'] # static inputs, such as irrigation share and query files.
         else:
@@ -994,7 +1004,7 @@ class NetcdfDemoModule(GcamModuleBase):
      forcing  - forcing value (written into the output data as metadata)
     globalpop - 2050 global population (written into output data as metadata)
        pcGDP  - 2050 per-capita GDP (written into output data as metadata -- currently not used anyhow)
-    outputdir - output directory
+    outfile - output file
 
     Module dependences:  HydroModule, WaterDisaggregationModule
 
@@ -1016,10 +1026,13 @@ class NetcdfDemoModule(GcamModuleBase):
         rcp = self.params['rcp']
         pop = self.params['pop']
         gdp = 10.0              # Dummy value; we didn't implement the GDP scenarios.
-        outfile = self.params['outfile']
+        outfile = util.abspath(self.params['outfile'])
         mat2nc  = util.abspath(self.params['mat2nc'],os.getcwd())
         
         self.results['outfile'] = outfile
+
+        ## ensure that the directory the output file is being written to exists
+        util.mkdir_if_noexist(os.path.dirname(outfile))
         
         try:
             ## create a temporary file to hold the config

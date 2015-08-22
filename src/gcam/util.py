@@ -298,3 +298,37 @@ def abspath(filename,defaultpath=None, tag=None):
         return os.path.abspath(filename)
     else:
         return os.path.join(defaultpath,filename)
+
+def mkdir_if_noexist(dirname):
+    """Create a directory, if it doesn't exist already.
+
+    This function will create the specified directory, along with any
+    intermediate directories, if they don't already exist.  If the
+    directory already exists, nothing is done.  If the directory
+    doesn't exist, and can't be created, an exception is raised.  The
+    directory will be created with the default access mode of 0777,
+    which will be modified by the current umask in the usual way.
+
+    Arguments:
+        dirname - Name of the directory to create
+
+    Return value:  none
+
+    Exceptions:
+      OSError - The directory doesn't exist but can't be created.
+                Usually this means that either a non-directory 
+                file type already exists at that name, or some 
+                intermediate directory is not writeable by this UID.
+
+    Limitations:  If the directory already exists, this function 
+                  does not check to see if it is readable or
+                  writeable by this UID.
+    """
+
+    try:
+        os.makedirs(dirname)
+    except OSError:
+        if os.path.isdir(dirname):
+            pass
+        else:
+            raise
