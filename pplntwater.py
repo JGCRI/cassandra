@@ -1,7 +1,7 @@
 import json
-import ast
 
 def getWaterUsage(file, dictionary):
+#"""Takes powerplant geoJSON raw data and adds water usage."""
     #Load original geoJSON file
     raw_json = json.load(file) #Note: doesn't matter if file is JSON or GeoJSON
     
@@ -58,25 +58,6 @@ def getWaterUsage(file, dictionary):
     #Add tail of geoJSON
     output += ''']
 }'''
-    
-    return(json.dumps(output))   #Returns json format string. If using json.loads instead, returns a dictionary. 
+    out = json.dumps(output)
+    return(json.loads(out))   #Returns json format string. Use ast.literal.eval(out) to convert to dictionary.  
 
-        
-#Driver
-infile = open("toy.json", "r")
-#outfile = open("new.json", 'w')
-dict1 = {'Coal': 1, 'Gas':2, 'Nuclear':3} #Insert conversion factors here. 
-
-z = getWaterUsage(infile, dict1)
-print(json.loads(z))        #Prints correctly, can be written to file. 
-#outfile.write(json.loads(z))
-
-#Convert string to dictionary (will lose formatting)
-a = json.loads(z)
-b = ast.literal_eval(a) #Converts to dictionary.
-print(b["type"])        #Now can use dictionary keys.
-print(b)                #New format is just a block of text
-
-      
-infile.close()
-#outfile.close()
