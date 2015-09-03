@@ -1,0 +1,15 @@
+{"type": "FeatureCollection", "features":[
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-60.17, -33.36]},
+        "properties": {"name": "AES Central Thermal San Nicolas Power Plant Argentina Buenos Aires Argentina",
+        "country": " Argentina", "fuel": "Coal", "capacity": "650MWe", "water-withdrawal": 650.00, "units": "km^3"}
+        },
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [151.54, -33.21]},
+        "properties": {"name": "Munmorah Coal Power Station Australia (Shutdown) New South Wales Australia",
+        "country": " Australia", "fuel": "Coal", "capacity": "600MWe", "water-withdrawal": 600.00, "units": "km^3"}
+        },
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [150.95, -32.40]},
+        "properties": {"name": "Bayswater Coal Power Plant Australia New South Wales Australia",
+        "country": "", "fuel": "Coal", "capacity": "2640MWe", "water-withdrawal": 2640.00, "units": "km^3"}
+        }
+    ]
+}
