@@ -1,6 +1,7 @@
 #Test pplnt water and pplnt_convertjson
 import pplntwater
 import pplnt_convertjson
+import pplnt_writecsv
 import json
 
 ###Driver
@@ -15,5 +16,6 @@ print(x)
 z = pplnt_convertjson.pplnt_convertjson(x)
 print(z)
 
+a = pplnt_writecsv.pplnt_writecsv(z)
 
 infile.close()
