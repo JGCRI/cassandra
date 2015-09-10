@@ -28,6 +28,10 @@ mat2nc
 # R data files from past sessions
 .Rdata
 
+# TeX intermediate files
+doc/*.aux
+doc/*.log
+
 # Emacs backup files
 *~
 
@@ -46,12 +50,7 @@ model_interface.properties
 
 # Configurations for runs
 run-config/
-runconfig/
-batchfiles/
 lamp-inputs/
-
-# Batch scripts
-run-*.zsh
 
 
 # original query file
