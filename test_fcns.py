@@ -2,6 +2,7 @@
 import pplntwater
 import pplnt_convertjson
 import pplnt_writecsv
+import pplnt_grid
 import json
 
 ###Driver
@@ -15,6 +16,7 @@ print(x)
 #List of (lon, lat, val) tuples
 z = pplnt_convertjson.pplnt_convertjson(x)
 print(z)
+print(pplnt_grid.pplnt_grid(z))
 
 a = pplnt_writecsv.pplnt_writecsv(z)
 
