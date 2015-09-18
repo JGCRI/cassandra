@@ -4,6 +4,11 @@
         "id": "geoid/42220",
         "geometry": {"type" : "Point", "coordinates": [-60.173400, -33.355900]},
         "properties": {"name": "AES Central Thermal San Nicolas Power Plant Argentina Buenos Aires Argentina", "country": " Argentina", "fuel": "Coal", "capacity": "650MWe"}
+         },
+	{ "type": "Feature",
+        "id": "geoid/42220",
+        "geometry": {"type" : "Point", "coordinates": [-60.2, -33.2]},
+        "properties": {"name": "Test plant", "country": " Argentina", "fuel": "Gas", "capacity": "250MWe"}
         },
          { "type": "Feature",
         "id": "geoid/43140",

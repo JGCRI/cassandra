@@ -49,10 +49,9 @@ def pplnt_grid(tuple_list, resolution=[.5, .5], boundary= [-180, -90, 180, 90]):
         #Only add to grid if within grid boundaries. Include edges. 
         if (i>=i_start and i<i_end) and (j>=j_start and j<j_end):
             if (i,j) in grid:
-                grid[(i,j)].append(tuple_list[n])
+                grid[(i,j)] += tuple_list[n][-1] # last entry is the value we want
             else:
-                grid[(i,j)]= []
-                grid[(i,j)].append(tuple_list[n])
+                grid[(i,j)] = tuple_list[n][-1]
     
     return(grid)
 
@@ -71,13 +70,17 @@ def pplnt_convertjson(json_input):
     return(output)
 
 
-def pplnt_writecsv(tuple_list, filename):
+def pplnt_writecsv(tuple_list, filename, comment=None):
     """Takes list of (lon, lat, water-usage) tuples ('tuple_list') and a string indicating the
     name of the output file ('filename') and writes to a 3-column csv ('outfile')."""
 
-    outfile = open(filename, 'w')
+    outfile = open(filename, 'w')          # python3 note:  should use newline=''
+    if comment is None:
+        outfile.write('#power plant data\n')
+    else:
+        outfile.write('#%s\n'%comment)
 
-    csv_write = csv.writer(outfile, delimiter=',')
+    csv_write = csv.writer(outfile, delimiter=',', lineterminator='\n') # lineterminator= not needed in python3 (see comment above)
     csv_write.writerows(tuple_list)
 
     outfile.close()

@@ -11,7 +11,7 @@ from gcam.water import pplnt
 import json
 
 ###Driver
-infile = open('data/toy.json', 'r')
+infile = open('data/toy.json', 'r')          
 dict1 = {'Coal': 1, 'Gas':2, 'Nuclear':3}
 
 #Get python dictionary with water usage factors from json file
