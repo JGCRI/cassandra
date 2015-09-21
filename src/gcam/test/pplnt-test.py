@@ -19,8 +19,10 @@ x = pplnt.getWaterUsage(infile, dict1)
 print(x)
 
 #List of (lon, lat, val) tuples
-z = pplnt.pplnt_convertjson(x)
-print(z)
+a = pplnt.pplnt_convertjson(x)
+print(pplnt.pplnt_grid(a))
+
+z = [(0,0,100), (0,0.4,200), (-179.7, -90,300), (180, 90, 400), (179.5,-89.6, 500)]
 print(pplnt.pplnt_grid(z))
 
 a = pplnt.pplnt_writecsv(z,'pplnt-out-test.csv')
