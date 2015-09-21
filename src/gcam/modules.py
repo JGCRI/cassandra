@@ -887,6 +887,18 @@ class WaterDisaggregationModule(GcamModuleBase):
             transfer = False
             transfer_file = '/dev/null' # won't be used by the matlab program, but we still need a placeholder
 
+        if 'power-plant-data' in self.params:
+            ppinfile = self.params['power-plant-data']
+            wfcoal = self.params.get('waterfac-coal') # get() suplies None as a default value
+            wfgas = self.params.get('waterfac-gas')
+            wfnuc = self.params.get('waterfac-nuc')
+                
+            ppgrid_data = waterdisag.pplant_proc(ppinfile,tempdir, wfcoal, wfgas, wfnuc)
+            ppflag = 1
+        else:
+            ppgrid_data = '/dev/null' # matlab prog will detect and use fallback.
+            ppflag = 0
+            
         self.results['water-transfer'] = transfer
         ## append the transfer status to the scenario tag
         if transfer:
@@ -981,7 +993,16 @@ class WaterDisaggregationModule(GcamModuleBase):
             tflag = 1
         else:
             tflag = 0
-        matlabfn = "run_disaggregation('%s', '%s', '%s','%s','%s','%s', '%s', '%s','%s','%s', '%s', %d, '%s', %d);" % (runoff_file, chflow_file, hist_runoff_file, hist_chflow_file, basinqfile,rgnqfile,  rgnconfig, tempdir, outputdir, scenariotag,runid, tflag, transfer_file, read_irrS)
+
+        matlabdata = {'runoff':runoff_file, 'chflow':chflow_file,
+                      'histrunoff':hist_runoff_file,
+                      'histchflow':hist_chflow_file, 'basinqfile':basinqfile,
+                      'rgnqfile':rgnqfile, 'rgnconfig':rgnconfig, 'tempdir':tempdir,
+                      'ppgrid':ppgrid_data, 'ppflg':ppflag,
+                      'outputdir':outputdir, 'scenario':scenariotag,
+                      'runid':runid, 'trnflag':tflag, 'trnfile':transfer_file,
+                      'rdirrS':read_irrS}
+        matlabfn = "run_disaggregation('{runoff}', '{chflow}', '{histrunoff}', '{histchflow}', '{basinqfile}', '{rgnqfile}', '{rgnconfig}', '{tempdir}', {ppflg:d}, '{ppgrid}', '{outputdir}', '{scenario}', '{runid}', {trnflag:d}, '{trnfile}', {rdirrS:d})".format(**matlabdata)
         print 'current dir: %s ' % os.getcwd()
         print 'matlab fn:  %s' % matlabfn
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:

@@ -70,7 +70,7 @@ def pplnt_convertjson(json_input):
     return(output)
 
 
-def pplnt_writecsv(tuple_list, filename, comment=None):
+def pplnt_writecsv(grid_as_dict, filename, comment=None):
     """Takes list of (lon, lat, water-usage) tuples ('tuple_list') and a string indicating the
     name of the output file ('filename') and writes to a 3-column csv ('outfile')."""
 
@@ -81,6 +81,7 @@ def pplnt_writecsv(tuple_list, filename, comment=None):
         outfile.write('#%s\n'%comment)
 
     csv_write = csv.writer(outfile, delimiter=',', lineterminator='\n') # lineterminator= not needed in python3 (see comment above)
+    tuple_list = [(key[0],key[1],value) for key,value in grid_as_dict.iteritems()]
     csv_write.writerows(tuple_list)
 
     outfile.close()

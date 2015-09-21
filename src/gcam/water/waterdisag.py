@@ -6,6 +6,7 @@ from gcam import util
 import re
 import os.path
 from sys import stderr,stdout
+import pplnt
 
 ## Canonical ordering of the regions for outputs
 _regions_ordered = []
@@ -703,3 +704,47 @@ def find_cropno(crop):
         else:
             raise
     return cropno
+
+def pplant_proc(infile, tempdir, wfcoal, wfgas, wfnuc):
+    """Process a goeJSON file of power plant data into a grid format for use by Matlab.
+
+    This function converts each power plant record to water usage using the
+    specified conversion factors.  Any conversion factors passed in as None will
+    be set to default values.  The resulting sparse grid will be written to the
+    file ppgrid.csv in tempdir.  The columns in the output file are: column,
+    row, value.
+
+    Arguments:
+      
+      infile - input geoJSON file.  The input should be a feature list of point features with a 
+               'capacity' property that gives the plant's rating in MWe.
+
+      tempdir - directory to write the output file to
+
+      wfcoal, wfgas, wfnuc - water intensity in km^3/MW-yr
+
+    Return value:  file name (absolute path) of the output file
+    """
+    from gcam.water import pplnt
+
+    outfile = os.path.abspath(os.path.join(tempdir,'ppgrid.csv'))
+    ## set default values if necessary.  These values are placeholders, since
+    ## I'm not sure the units on the source I'm using are right.  The ratios,
+    ## however, should be correct, which is what we are really after here.
+    if wfcoal is None:
+        wfcoal = 3.80           # typical withdrawal for recirculating cooling on coal steam plant
+    if wfgas is None:
+        wfgas = 0.96            # recirculating gas combined cycle
+    if wfnuc is None:
+        wfnuc = 4.17            # recirculating nuclear steam
+
+    infileh = open(infile,'r')
+    wfac = {'Coal':wfcoal, 'Gas':wfgas, 'Nuclear':wfnuc}
+
+    ppwater = pplnt.getWaterUsage(infileh, wfac)
+    pplatlon = pplnt.pplnt_convertjson(ppwater)
+    ppgrid = pplnt.pplnt_grid(pplatlon)
+
+    pplnt.pplnt_writecsv(ppgrid, outfile, 'Water usage proxy by grid cell:  column, row, water value')
+
+    return outfile
