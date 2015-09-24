@@ -21,8 +21,10 @@ print(x)
 #List of (lon, lat, val) tuples
 z = pplnt.pplnt_convertjson(x)
 print(z)
-print(pplnt.pplnt_grid(z))
+ppgrid = pplnt.pplnt_grid(z)
+print(ppgrid)
 
-a = pplnt.pplnt_writecsv(z,'pplnt-out-test.csv')
+comment = 'Water usage proxy grid: column, row, water value'
+a = pplnt.pplnt_writecsv(ppgrid,'pplnt-out-test.csv', comment)
 
 infile.close()

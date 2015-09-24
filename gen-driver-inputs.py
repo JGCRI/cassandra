@@ -16,7 +16,7 @@ gcm_codes     = {'FIO_ESM' : 'g0', 'CCSM4' : 'g1', 'GISS_E2_R' : 'g2'}
 clobber_hydro = 'False'
 clobber_disag = 'False'
 
-water_transfer = 'True'
+water_transfer = 'False'
 transfer_file  = '../gcam-hydro/inputs/water-transfer.csv'
 for gcm in gcms:
     cfgbatch = []
@@ -24,7 +24,7 @@ for gcm in gcms:
         for pop in pops:
             runname = '%s-%s-%s-%s' % (gcm, scen, pop, wt_str[water_transfer])
 
-            cfgfile = 'runconfig/%s.cfg' % runname
+            cfgfile = 'runconfig/pplant-%s.cfg' % runname
 
             print 'cfgfile = %s' % cfgfile
             
@@ -79,14 +79,14 @@ runid = r1i1p1_195001_200512
                           'workdir = ../gcam-hydro\n' +
                           'inputdir = ./input-data\n' +
                           'clobber = %s\n'% clobber_disag) 
-                logfile  = '../gcam-hydro/logs/%s-disag-log.txt' % runname
+                logfile  = '../gcam-hydro/logs/%s-disag-pplant-log.txt' % runname
                 cfg.write('logfile = %s\n' % logfile)
-                tempdir  = 'output/waterdisag/wdtmp-%s'% runname
+                tempdir  = 'output/waterdisag/wdtmp-pplant-%s'% runname
                 try:
                     os.makedirs(tempdir)
                 except OSError:
                     pass # os error is normal if the dir already exists.
-                outputdir = 'output/demo-data/%s'  % runname
+                outputdir = 'output/demo-data-pplant/%s'  % runname
                 try:
                     os.makedirs(outputdir)
                 except OSError:
@@ -97,6 +97,7 @@ runid = r1i1p1_195001_200512
                 cfg.write('scenario = %s\n' % scen)
                 cfg.write('water-transfer = %s\n' % water_transfer)
                 cfg.write('transfer-file = %s\n' % transfer_file)
+                cfg.write('power-plant-data = ./input-data/power-plants.geojson\n')
 
                 ## write the netcdf production section.
                 cfg.write('\n[NetcdfDemoModule]\nmat2nc = ./src/C/mat2nc\n')
@@ -117,9 +118,9 @@ runid = r1i1p1_195001_200512
                     gcm_str = gcm_codes[gcm]
                 else:
                     gcm_str = gcm+'-'
-                outfilename = './output/demo-data/netcdf/%s%s%s%s.nc' % (gcm_str, gcam_scen_str[scen], pop, wt_str[water_transfer])
+                outfilename = './output/demo-data-pplant/netcdf/%s%s%s%s-pplant.nc' % (gcm_str, gcam_scen_str[scen], pop, wt_str[water_transfer])
                 try:
-                    os.makedirs('./output/demo-data/netcdf')
+                    os.makedirs('./output/demo-data-pplant/netcdf')
                 except OSError:
                     pass        # see note above
                 cfg.write('outfile = %s\n' % outfilename)
@@ -128,7 +129,7 @@ runid = r1i1p1_195001_200512
 
 
 
-    batchfile = 'batchfiles/%s-%s.zsh' % (gcm, wt_str[water_transfer])
+    batchfile = 'batchfiles/pplant-%s-%s.zsh' % (gcm, wt_str[water_transfer])
     with open(batchfile, 'w') as bat:
         bat.write("""#!/bin/zsh
 #SBATCH -t 4-0

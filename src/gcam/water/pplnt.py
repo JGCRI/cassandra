@@ -81,8 +81,8 @@ def pplnt_writecsv(grid_as_dict, filename, comment=None):
         outfile.write('#%s\n'%comment)
 
     csv_write = csv.writer(outfile, delimiter=',', lineterminator='\n') # lineterminator= not needed in python3 (see comment above)
-    tuple_list = [(key[0],key[1],value) for key,value in grid_as_dict.iteritems()]
-    csv_write.writerows(tuple_list)
+    csvrows = ((key[0],key[1],value) for key,value in grid_as_dict.iteritems())
+    csv_write.writerows(csvrows)
 
     outfile.close()
 

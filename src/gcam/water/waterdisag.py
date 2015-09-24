@@ -721,7 +721,7 @@ def pplant_proc(infile, tempdir, wfcoal, wfgas, wfnuc):
 
       tempdir - directory to write the output file to
 
-      wfcoal, wfgas, wfnuc - water intensity in km^3/MW-yr
+      wfcoal, wfgas, wfnuc - water intensity in m^3/MW-h
 
     Return value:  file name (absolute path) of the output file
     """
