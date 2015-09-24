@@ -83,10 +83,10 @@ def pplnt_grid(tuple_list, grid_size = [720, 360], extent= [-180, -90, 180, 90])
         if (i>=i_start and i<i_end) and (j>=j_start and j<j_end):
             #For existing cells, add new water usage value to total.     
             if (i,j) in grid:
-                grid[(i,j)] = grid[(i,j)] + water
+                grid[(i,j)] += tuple_list[n][-1] # last entry is the value we want
             #Otherwise create new dictionary entry. 
             else:
-                grid[(i,j)]= water
+                grid[(i,j)] = tuple_list[n][-1]
         else:
             print("(%d, %d) is located outside of the grid boundary and will be excluded." %(i, j))
 
@@ -119,7 +119,6 @@ def pplnt_convertjson(json_input):
     
     return(output)
 
-
 def pplnt_writecsv(tuple_list, filename):
     """Writes list of tuples to a csv file.
 
@@ -131,11 +130,15 @@ def pplnt_writecsv(tuple_list, filename):
                         quotation marks.
                     
     """
+    outfile = open(filename, 'w')          # python3 note:  should use newline=''
+    if comment is None:
+        outfile.write('#power plant data\n')
+    else:
+        outfile.write('#%s\n'%comment)
 
-    outfile = open(filename, 'w')
-
-    csv_write = csv.writer(outfile, delimiter=',')
-    csv_write.writerows(tuple_list)
+    csv_write = csv.writer(outfile, delimiter=',', lineterminator='\n') # lineterminator= not needed in python3 (see comment above)
+    csvrows = ((key[0],key[1],value) for key,value in grid_as_dict.iteritems())
+    csv_write.writerows(csvrows)
 
     outfile.close()
 
