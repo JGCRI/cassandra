@@ -104,10 +104,8 @@ def pplnt_convertjson(json_input):
                     in that order, while the ["properties"]["water-usage"] key corresponds
                     to water usage data. 
 
-    Return value: a list of tuples of three elements. Each tuple represents
-                    an individual powerplant. The first element of the tuple
-                    is longitude of the plant, the second is latitude of the
-                    plant, and the third is water usage of the plant. 
+    Return value: a list of tuples of three elements:(lon, lat, water-usage). Each tuple
+                    represents an individual powerplant. 
     """
 
     #Get list of plants
@@ -119,17 +117,10 @@ def pplnt_convertjson(json_input):
     
     return(output)
 
-def pplnt_writecsv(tuple_list, filename):
-    """Writes list of tuples to a csv file.
-
-    Arguments:
-        tuple_list - List of tuples where each tuple represents a power plant. The
-                        first value of the tuple is longitude, the second is latitude,
-                        and the third is water usage.
-          filename - The name of the output file, in the form "name.csv". Include
-                        quotation marks.
-                    
-    """
+def pplnt_writecsv(grid_as_dict, filename, comment=None):
+    """Takes list of (lon, lat, water-usage) tuples ('grid_as_dict') and a string indicating the
+    name of the output file ('filename') and writes to a 3-column csv ('outfile')."""
+    
     outfile = open(filename, 'w')          # python3 note:  should use newline=''
     if comment is None:
         outfile.write('#power plant data\n')
@@ -147,10 +138,7 @@ def convert_capacity(plant):
 
     Arguments:
         plant - A geoJSON object denoting an individual power plant. 
-
-    Return value: The capacity of the power plant, as a float. 
-    
-    """
+    Return value: The capacity of the power plant, as a float."""
 
     capacity = plant["properties"]["capacity"]
     capacity = float(capacity.replace("MWe",""))                
