@@ -55,12 +55,7 @@ def pplnt_grid(tuple_list, grid_size = [720, 360], extent= [-180, -90, 180, 90])
 
 
     #Add (lon, lat, water_usage) tuple to grid using (i, j) key
-    for n in range(0, len(tuple_list)):
-        #Lon, lat, water usage values
-        lon = tuple_list[n][0]
-        lat = tuple_list[n][1]
-        water = tuple_list[n][2]
-        
+    for (lon,lat,water) in tuple_list:
         #Calculate (i,j) values from lon, lat values
         if lon_start < i_start:
             i = int((lon+lon_offset)/cell_i)
@@ -83,10 +78,10 @@ def pplnt_grid(tuple_list, grid_size = [720, 360], extent= [-180, -90, 180, 90])
         if (i>=i_start and i<i_end) and (j>=j_start and j<j_end):
             #For existing cells, add new water usage value to total.     
             if (i,j) in grid:
-                grid[(i,j)] += tuple_list[n][-1] # last entry is the value we want
+                grid[(i,j)] += water
             #Otherwise create new dictionary entry. 
             else:
-                grid[(i,j)] = tuple_list[n][-1]
+                grid[(i,j)] = water
         else:
             print("(%d, %d) is located outside of the grid boundary and will be excluded." %(i, j))
 
@@ -97,15 +92,19 @@ def pplnt_convertjson(json_input):
     """Converts dictionary of powerplant data to (lon, lat, water-usage) tuples.
 
     Arguments:
-        json_input - dictionary of powerplant data, in geoJSON feature collection format.
-                    The key "features"  corresponds to a list of individual power plants,
-                    which each have "geometry"  and "properties" attributes. The key
-                    ["geometry"]["coordinates"] contains a (longitude, latitude) tuple,
-                    in that order, while the ["properties"]["water-usage"] key corresponds
-                    to water usage data. 
 
-    Return value: a list of tuples of three elements:(lon, lat, water-usage). Each tuple
-                    represents an individual powerplant. 
+        json_input - dictionary of powerplant data, in geoJSON feature
+                     collection format.  The key "features"
+                     corresponds to a list of individual power plants,
+                     which each have "geometry" and "properties"
+                     attributes. The key ["geometry"]["coordinates"]
+                     contains a (longitude, latitude) tuple, in that
+                     order, while the ["properties"]["water-usage"]
+                     key corresponds to water usage data.
+
+    Return value: a list of tuples of three elements:(lon, lat,
+                  water-usage). Each tuple represents an individual
+                  powerplant.
     """
 
     #Get list of plants
@@ -118,8 +117,20 @@ def pplnt_convertjson(json_input):
     return(output)
 
 def pplnt_writecsv(grid_as_dict, filename, comment=None):
-    """Takes list of (lon, lat, water-usage) tuples ('grid_as_dict') and a string indicating the
-    name of the output file ('filename') and writes to a 3-column csv ('outfile')."""
+    """Write dictionary representation of frid to csv.
+
+    Arguments:
+      
+      grid_as_dict - dictionary indexed with (row,column) tuples and
+                     grid cell values as values.
+
+      filename - name of output file
+
+      comment - (OPTIONAL) descriptive string to be written in the
+                first line of output.  If none, a default will be used
+                (i.e., the csv data always starts on line 2).
+
+    """
     
     outfile = open(filename, 'w')          # python3 note:  should use newline=''
     if comment is None:
@@ -138,7 +149,9 @@ def convert_capacity(plant):
 
     Arguments:
         plant - A geoJSON object denoting an individual power plant. 
-    Return value: The capacity of the power plant, as a float."""
+    
+    Return value: The capacity of the power plant, as a float.
+    """
 
     capacity = plant["properties"]["capacity"]
     capacity = float(capacity.replace("MWe",""))                
