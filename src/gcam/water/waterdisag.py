@@ -48,7 +48,7 @@ def init_rgn_tables(rgnconfig):
     global _gcam_rgn_translation
     global _gcam_drop_regions
     
-    (_rgnid, _regions_ordered) = util.rd_rgn_table('%s/RgnNames.txt'%rgnconfig)
+    (_, _regions_ordered) = util.rd_rgn_table('%s/RgnNames.txt'%rgnconfig) #Variable being ignored is reverse lookup table
     (_gis2000, _) = util.rd_rgn_table('%s/gis2000.csv'%rgnconfig)
     (_bfracFAO2005, _) = util.rd_rgn_table('%s/bfracFAO2005.csv'%rgnconfig)
     (_gfracFAO2005, _) = util.rd_rgn_table('%s/gfracFAO2005.csv'%rgnconfig)
