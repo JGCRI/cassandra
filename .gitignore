@@ -49,8 +49,9 @@ batch-out/
 model_interface.properties
 
 # Configurations for runs
-run-config/
+runconfig/
 lamp-inputs/
+batchfiles/
 
 
 # original query file
