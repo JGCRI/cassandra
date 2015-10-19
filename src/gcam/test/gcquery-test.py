@@ -25,7 +25,7 @@ from gcam.water import waterdisag
 
 ## Set up the global parameters module (which is used by some of the
 ## utility functions).
-genparams = {"ModelInterface" : "./../../../../ModelInterface/ModelInterface.jar",
+genparams = {"ModelInterface" : "/people/link593/wrk/ModelInterface/ModelInterface.jar",
              'inputdir' : './../../../input-data',
              'rgnconfig' : 'rgnchn',
              "DBXMLlib" : "/homes/pralitp/libs/dbxml-2.5.16/install/lib"} 
