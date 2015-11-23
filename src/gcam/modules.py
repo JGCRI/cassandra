@@ -1002,7 +1002,7 @@ class WaterDisaggregationModule(GcamModuleBase):
                       'outputdir':outputdir, 'scenario':scenariotag,
                       'runid':runid, 'trnflag':tflag, 'trnfile':transfer_file,
                       'rdirrS':read_irrS}
-        matlabfn = "run_disaggregation('{runoff}', '{chflow}', '{histrunoff}', '{histchflow}', '{basinqfile}', '{rgnqfile}', '{rgnconfig}', '{tempdir}', {ppflg:d}, '{ppgrid}', '{outputdir}', '{scenario}', '{runid}', {trnflag:d}, '{trnfile}', {rdirrS:d})".format(**matlabdata)
+        matlabfn = "run_disaggregation('{runoff}', '{chflow}', '{histrunoff}', '{histchflow}', '{basinqfile}', '{rgnqfile}', '{rgnconfig}', '{tempdir}', {ppflg:d}, '{ppgrid}', '{outputdir}', '{scenario}', '{runid}', {trnflag:d}, '{trnfile}', {rdirrS:d}); exit".format(**matlabdata)
         print 'current dir: %s ' % os.getcwd()
         print 'matlab fn:  %s' % matlabfn
         with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:
