@@ -65,7 +65,7 @@ of the module enclosed in square brackets and consists of a series of
 parameter-value pairs separated by an $=$ sign.  Parameters may be
 listed in any order.  Each module has its own set of parameter
 options, which are explained below.  An example configuration file is
-included with the code in the \texttt{example.cfg} file.
+included with the code in the \texttt{example-chn.cfg} file.
 
 The code instantiates modules as it finds them in the configuration
 file.  Because of this, a module can be excluded from a run merely by
@@ -224,6 +224,12 @@ configuration file this model is referred to as
   for input.  This parameter is ignored if there is a GCAM module
   present in the configuration.  If there is not a GCAM module in the
   configuration, then this parameter must be specified.
+\item[power-plant-data] \emph{(OPTIONAL)} Name of the input file
+  containing the power plant data described in
+  section~\ref{sec:pplant}.  If not specified, then the power plant
+  data will not be used, and water usage from electrical generation
+  will be disaggregated using population as a proxy (as in previous
+  versions of the disaggregation calculation).
 \end{description}
 
 \subsection{The netCDF Demo Module}
@@ -257,6 +263,67 @@ produced new data, then the modules calculation will not run; the
 preexisting results will be used instead.  If the ``clobber''
 parameter is set to True, then the module will run normally, with the
 new results overwriting the preexisting results, if any.
+
+\section{Using power plant location data}
+\label{sec:pplant}
+The GCAM water demand disaggregation can use data on power plant
+location and type as a proxy for disaggregating water demand from
+electrical generation.  Using this data is optional.  If it is not
+supplied, then population will be used as the proxy for water demand
+from electrical generation, as in previous versions of the
+calculation.
+
+The power plant data should be supplied as a geoJSON feature
+collection.  Each power station should be a single point feature in
+the list.  Each station should have a ``properties'' member, with a
+value that is itself a JSON object.  The ``properties'' object must
+have the following members:
+\begin{description}
+\item[fuel] String giving the fuel type.  Three types are currently
+  recognized:  ``Coal'', ``Nuclear'', and ``Gas''.
+\item[capacity] String giving the nameplate capacity of the plant in
+  MWe.  The unit ``MWe'' may be included in the string or omitted.
+\end{description}
+Object attributes beyond the required ones are permitted, and will be
+ignored by the disaggregation code.  An example set of inputs is
+provided in the input directory in the file
+\texttt{power-plants.geojson}.
+
+If the power plant data is provided, then water withdrawals will be
+computed for each plant by multiplying the nameplate capacity by a
+fuel-specific water intensity factor.  The water intensity was chosen
+by selecting the generation and cooling technologies representative of
+the type of plants expected to be built over the next few decades:
+\begin{center}
+\begin{tabular}{|l|l|r|}
+  \hline
+  fuel & assumed type & water intensity (m$^3$/MWh) \\\hline
+  Coal & steam, recirculating &  3.80  \\
+  Gas  & combined-cycle, recirculating &  0.96 \\
+  Nuclear & steam, recirculating &  4.17 \\\hline
+\end{tabular}
+\end{center}
+This procedure could readily be extended to factor in explicitly the
+generation and cooling technologies, if a data set including that
+information were available.
+
+These values are converted to a grid by summing the water withdrawals
+of the plants in each grid cell.  This grid will form the
+disaggregation proxy for the water calculation.  In practice, there
+are usually a few regions that no power plants within their borders.
+This typically happens with in sub-national regions, which are often
+part of a larger electrical grid and therefore may supply their power
+from generating capacity located outside their borders.  In these
+cases we revert to the population-proxy to allocate water withdrawals
+within the affected regions.
+
+The power plant proxy is asumed to be constant over the course of the
+simulation.  This has the effect of causing new capacity produced in
+GCAM simulations to be allocated to locations with existing capacity,
+and in fixed proportions.  Modeling the siting and size distribution
+of new power stations is beyond GCAM's scope; however, if a model for
+those properties were available, GCAM could be coupled to it to
+produce more realistic spatial distributions in the future.
 
 \appendix
 \section{Technical Reference}
