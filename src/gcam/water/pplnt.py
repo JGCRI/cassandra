@@ -78,7 +78,7 @@ def pplnt_grid(tuple_list, grid_size = [720, 360], extent= [-180, -90, 180, 90])
         if (i>=i_start and i<i_end) and (j>=j_start and j<j_end):
             #For existing cells, add new water usage value to total.     
             if (i,j) in grid:
-                grid[(i,j)] += water
+                grid[(i,j)] += water 
             #Otherwise create new dictionary entry. 
             else:
                 grid[(i,j)] = water
