@@ -24,9 +24,9 @@ from gcam.water import waterdisag
 
 ## Set up the global parameters module (which is used by some of the
 ## utility functions).
-## XXX these paths are specific to the configuration on Evergreen.
-genparams = {"ModelInterface" : "/lustre/data/rpl/ModelInterface-baseX/ModelInterface.jar",
-             "DBXMLlib" : "/homes/pralitp/libs/dbxml-2.5.16/install/lib"} 
+## XXX these paths are specific to the configuration on PIC.
+genparams = {"ModelInterface" : "/pic/projects/GCAM/ModelInterface-baseX/ModelInterface.jar",
+             "DBXMLlib" : "/pic/projects/GCAM/GCAM-libraries/lib"}
 global_params = GlobalParamsModule({})
 for key in genparams.keys():
     global_params.addparam(key, genparams[key])
