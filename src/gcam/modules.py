@@ -9,7 +9,7 @@ be completely contained in this module.
 
 Classes:
 
-GcamModuleBase    - Base class for all GCAM modules.  Provides the 
+GcamModuleBase    - Base class for all GCAM modules.  Provides the
                     interface, as well as services like managing
                     threads, locks, and condition variables.
 
@@ -23,17 +23,17 @@ HistoricalHydroModule - Run the historical hydrology calculation.
 
 WaterDisaggregationModule - Run the water disaggregation calculation.
 
-NetcdfDemoModule  - Package outputs into a netCDF file for the 
+NetcdfDemoModule  - Package outputs into a netCDF file for the
                     Decision Theater Demo.
 
 """
 
-## TODO: many of these classes have gotten a bit long.  It would be
-## better to refactor them so that the main functionality is
-## implemented in a separate python module for each GCAM module, with
-## the GCAM module subclass providing a thin wrapper that grabs inputs
-## needed from other modules and passes them to a main function in the
-## relevant python module.
+# TODO: many of these classes have gotten a bit long.  It would be
+# better to refactor them so that the main functionality is
+# implemented in a separate python module for each GCAM module, with
+# the GCAM module subclass providing a thin wrapper that grabs inputs
+# needed from other modules and passes them to a main function in the
+# relevant python module.
 
 import os
 import os.path
@@ -47,15 +47,15 @@ from gcam import util
 
 
 class GcamModuleBase(object):
-    """Common base class for all of the GCAM modules (i.e., functional units).  
-    
+    """Common base class for all of the GCAM modules (i.e., functional units).
+
     We can put any utility functions that are common to all modules
     here, but its main purpose is to provide all the multithreading
     functionality so that the individual modules can focus
     exclusively on doing their particular tasks.
-    
+
     Methods that shouldn't be overridden:
-    
+
     run(): start the module running.  The params argument should
            be a dictionary containing the parameters the module
            needs (probably parsed from the initial config).  Each
@@ -67,7 +67,7 @@ class GcamModuleBase(object):
            the inherent limitations imposed by data dependencies
            between the modules.  This method returns the thread
            object, mainly so that the driver can call join() on
-           all of the module threads. 
+           all of the module threads.
            TODO: implement an active thread counter.
 
     runmod_wrapper(): used internally by run().  Don't monkey around
@@ -81,7 +81,7 @@ class GcamModuleBase(object):
 
     addparam(): Add a key and value to the params array.  Generally
                 this should only be done in the config file parser.
-                
+
     Methods that can be extended (but not overridden; you must be sure
          to call the base method):
 
@@ -115,19 +115,19 @@ class GcamModuleBase(object):
             addparam method.
 
     """
-     
+
     def __init__(self, cap_tbl):
         """Initialize the GCAM module base.
-        
+
         Every subclass __init__ method should call this method as its
         first action.  The cap_tbl argument is a dictionary linking
         capabilities (i.e., tags for identifying functional units)
         with the modules that provide those capabilities.  Subclasses
         should extend this method by adding their self reference to
         the table under an appropriate tag.  E.g.:
-         
+
         cap_tbl['gcam_core'] = self
-         
+
         The capability table will be available as self.cap_tbl for use
         in a subclass's methods.  Since gcam_driver passes the same
         capacity table to each subclass instance initialization, by
@@ -137,21 +137,21 @@ class GcamModuleBase(object):
         """
         self.status = 0         # status indicator: 0- not yet run, 1- complete, 2- error
         self.results = {}
-        self.params  = {}
+        self.params = {}
         self.results["changed"] = 1
-        self.cap_tbl = cap_tbl # store a reference to the capability lookup table
+        self.cap_tbl = cap_tbl  # store a reference to the capability lookup table
         self.condition = threading.Condition()
 
     def run(self):
         """Execute the module's runmod() method in a separate thread."""
         thread = threading.Thread(target=lambda: self.runmod_wrapper())
         thread.start()
-        ## returns immediately
+        # returns immediately
         return thread
 
     def runmod_wrapper(self):
         """Lock the condition variable, execute runmod(), and unlock when it returns.
-        
+
         At the conclusion of the runmod() method, self.status will be
         set to 1 if the run was successful, to 2 otherwise.  This
         variable will be used by the fetch() method to notify clients
@@ -170,18 +170,18 @@ class GcamModuleBase(object):
 
         """
 
-        ## This block holds the lock on the condition variable for the
-        ## entire time the runmod() method is running.  That's ok for
-        ## now, but it's not ideal, and it will cause problems when we
-        ## eventually try to implement co-simulations.
+        # This block holds the lock on the condition variable for the
+        # entire time the runmod() method is running.  That's ok for
+        # now, but it's not ideal, and it will cause problems when we
+        # eventually try to implement co-simulations.
         with self.condition:
             try:
                 rv = self.runmod()
-                if not rv==0:
-                    ## possibly add some other error handling here.
+                if not rv == 0:
+                    # possibly add some other error handling here.
                     raise RuntimeError("%s:  runmod returned error code %s" % (self.__class__, str(rv)))
                 else:
-                    stdout.write("%s: finished successfully.\n"%(self.__class__))
+                    stdout.write("%s: finished successfully.\n" % (self.__class__))
 
                 self.status = 1                  # set success condition
             except:
@@ -189,8 +189,8 @@ class GcamModuleBase(object):
                 raise
             finally:
                 self.condition.notify_all()      # release any waiting threads
-        ## end of with block:  lock on condition var released.
-        
+        # end of with block:  lock on condition var released.
+
     def fetch(self):
         """Return the results of the calculation as a dictionary.
 
@@ -203,36 +203,36 @@ class GcamModuleBase(object):
 
         """
 
-        ## If the module is currently running, then the condition
-        ## variable will be locked, and we will block when the 'with'
-        ## statement tries to obtain the lock.
-        with self.condition: 
+        # If the module is currently running, then the condition
+        # variable will be locked, and we will block when the 'with'
+        # statement tries to obtain the lock.
+        with self.condition:
             if self.status == 0:                  # module hasn't run yet.  Wait on it
                 print "\twaiting on %s\n" % self.__class__
                 self.condition.wait()
-        ## end of with block:  lock is released
+        # end of with block:  lock is released
 
-        ## By this point, the module should have run.  If status is not success, then
-        ## there has been an error.
+        # By this point, the module should have run.  If status is not success, then
+        # there has been an error.
         if self.status != 1:
-            raise RuntimeError("%s: wait() returned with non-success status!"%self.__class__)
+            raise RuntimeError("%s: wait() returned with non-success status!" % self.__class__)
 
         return self.results
 
     def finalize_parsing(self):
-        """Process parameters that are common to all modules (e.g. clobber).  
+        """Process parameters that are common to all modules (e.g. clobber).
 
         The modules will be responsible for processing their own
         special parameters.  If a module needs to override this
         method, it should be sure to call the base version too.
 
         """
-        
+
         self.clobber = True          # default to overwriting outputs
-        if "clobber" in self.params: 
+        if "clobber" in self.params:
             self.clobber = util.parseTFstring(self.params["clobber"])
 
-        ## processing for additional common parameters go here
+        # processing for additional common parameters go here
         return
 
     def addparam(self, key, value):
@@ -242,16 +242,16 @@ class GcamModuleBase(object):
         config file parser.
 
         """
-        
+
         self.params[key] = value
 
     def runmod(self):
         """Subclasses of GcamModuleBase are required to override this method."""
 
-        raise NotImplementedError("GcamModuleBase is not a runnable class.") 
+        raise NotImplementedError("GcamModuleBase is not a runnable class.")
 
 
-## class to hold the general parameters.  
+# class to hold the general parameters.
 class GlobalParamsModule(GcamModuleBase):
     """Class to hold the general parameters for the calculation.
 
@@ -284,7 +284,7 @@ class GlobalParamsModule(GcamModuleBase):
                   (OPTIONAL - default is 'rgn14')
 
     """
-    
+
     def __init__(self, cap_tbl):
         """Copy parameters into results dictionary.
 
@@ -294,17 +294,17 @@ class GlobalParamsModule(GcamModuleBase):
         """
         super(GlobalParamsModule, self).__init__(cap_tbl)
 
-        self.results = self.params # this is a reference copy, so any entries added to
-                                   # params will also appear in results. 
+        self.results = self.params  # this is a reference copy, so any entries added to
+        # params will also appear in results.
 
         print 'General parameters as input:'
         print self.results
         cap_tbl["general"] = self
 
-        ## We need to allow gcamutil access to these parameters, since it doesn't otherwise know how to find the
-        ## global params module.  
+        # We need to allow gcamutil access to these parameters, since it doesn't otherwise know how to find the
+        # global params module.
         util.global_params = self
-        
+
     def runmod(self):
         """Set the default value for the optional parameters, and convert filenames to absolute paths."""
         self.results['ModelInterface'] = util.abspath(self.results['ModelInterface'])
@@ -314,18 +314,18 @@ class GlobalParamsModule(GcamModuleBase):
             inputdir = self.results['inputdir']
         else:
             inputdir = './input-data'
-        self.results['inputdir'] = util.abspath(inputdir,os.getcwd())
-        
+        self.results['inputdir'] = util.abspath(inputdir, os.getcwd())
+
         if 'rgnconfig' in self.results:
             rgnconfig = self.results['rgnconfig']
         else:
             stdout.write('[GlobalParamsModule]: Using default region mapping (14 region)')
             rgnconfig = 'rgn14'
-        self.results['rgnconfig'] = util.abspath(rgnconfig,self.results['inputdir'])
+        self.results['rgnconfig'] = util.abspath(rgnconfig, self.results['inputdir'])
 
         return 0                # nothing to do here.
 
-    
+
 class GcamModule(GcamModuleBase):
     """Provide the 'gcam-core' capability.
 
@@ -337,22 +337,22 @@ class GcamModule(GcamModuleBase):
       config     = full path to gcam configuration file
       logconfig  = full path to gcam log configuration file
       clobber    = flag: True = clobber old outputs, False = preserve old outputs
-    
+
     Results:
       dbxml      = gcam dbxml output file.  We get this from the gcam config.xml file.
 
     Module dependences: none
 
     """
-    
+
     def __init__(self, cap_tbl):
         """Add self to the capability table."""
-        super(GcamModule,self).__init__(cap_tbl)
+        super(GcamModule, self).__init__(cap_tbl)
         cap_tbl["gcam-core"] = self
 
     def runmod(self):
         """Run the GCAM core model.
-        
+
         We start by checking to see that all the input files needed
         for GCAM to run are actually available.  If any of them are
         missing, we raise an IOError execption.  Next we parse the
@@ -363,24 +363,24 @@ class GcamModule(GcamModuleBase):
         run and then return the dbxml location.
 
         """
-        
-        ### Process the parameters
-        exe    = self.params["exe"]
-        cfg    = self.params["config"]
+
+        # Process the parameters
+        exe = self.params["exe"]
+        cfg = self.params["config"]
         logcfg = self.params["logconfig"]
         try:
-            logfile = self.params['logfile'] # file for redirecting gcam's copious stdout
+            logfile = self.params['logfile']  # file for redirecting gcam's copious stdout
         except KeyError:
             ## logfile is optional
             logfile = None
 
-        ## usually the exe, cfg, and logcfg files will be in the same
-        ## directory, but in case of difference, take the location of
-        ## the config file as controlling.
+        # usually the exe, cfg, and logcfg files will be in the same
+        # directory, but in case of difference, take the location of
+        # the config file as controlling.
         self.workdir = os.path.dirname(exe)
 
         msgpfx = "GcamModule: "    # prefix for messages coming out of this module
-        ## Do some basic checks:  do these files exist, etc.
+        # Do some basic checks:  do these files exist, etc.
         if not os.path.exists(exe):
             raise IOError(msgpfx + "File " + exe + " does not exist!")
         if not os.path.exists(cfg):
@@ -388,62 +388,65 @@ class GcamModule(GcamModuleBase):
         if not os.path.exists(logcfg):
             raise IOError(msgpfx + "File " + logcfg + " does not exist!")
 
-        ## we also need to get the location of the dbxml output file.
-        ## It's in the gcam.config file (we don't repeat it in the
-        ## config for this module because then we would have no way to
-        ## ensure consistency).
+        # we also need to get the location of the dbxml output file.
+        # It's in the gcam.config file (we don't repeat it in the
+        # config for this module because then we would have no way to
+        # ensure consistency).
         dbxmlfpat = re.compile(r'<Value name="xmldb-location">(.*)</Value>')
         dbenabledpat = re.compile(r'<Value name="write-xml-db">(.*)</Value>')
         with open(cfg, "r") as cfgfile:
-            ## we don't need to parse the whole config file; all we
-            ## want is to locate the name of the output file make sure
-            ## the dbxml output is turned on.
+            # we don't need to parse the whole config file; all we
+            # want is to locate the name of the output file make sure
+            # the dbxml output is turned on.
             dbxmlfile = None
             for line in cfgfile:
-                ## the dbxml file name will come early in the file
+                # the dbxml file name will come early in the file
                 match = dbxmlfpat.match(line.lstrip())
                 if match:
                     dbxmlfile = match.group(1)
                     break
 
             print "%s:  dbxmlfile = %s" % (self.__class__, dbxmlfile)
-            ## The file spec is a relative path, starting from the
-            ## directory that contains the config file.
-            dbxmlfile = os.path.join(self.workdir,dbxmlfile) 
-            self.results["dbxml"] = dbxmlfile # This is our eventual output
+            # The file spec is a relative path, starting from the
+            # directory that contains the config file.
+            dbxmlfile = os.path.join(self.workdir, dbxmlfile)
+            self.results["dbxml"] = dbxmlfile  # This is our eventual output
             if os.path.exists(dbxmlfile):
                 if not self.clobber:
-                    ## This is not an error; it just means we can leave
-                    ## the existing output in place and return it.
+                    # This is not an error; it just means we can leave
+                    # the existing output in place and return it.
                     print "GcamModule:  results exist and no clobber.  Skipping."
-                    self.results["changed"] = 0 # mark the cached results as clean
+                    self.results["changed"] = 0  # mark the cached results as clean
                     return 0
                 else:
-                    ## have to remove the dbxml, or we will merely append to it
+                    # have to remove the dbxml, or we will merely append to it
                     os.unlink(dbxmlfile)
 
-            ## now make sure that the dbxml output is turned on
+            # now make sure that the dbxml output is turned on
             for line in cfgfile:
                 match = dbenabledpat.match(line.lstrip())
                 if match:
                     if match.group(1) != "1":
-                        raise RuntimeError(msgpfx + "Config file has dbxml input turned off.  Running GCAM would be futile.")
+                        raise RuntimeError(
+                            msgpfx + "Config file has dbxml input turned off.  Running GCAM would be futile.")
                     else:
                         break
 
-        ## now we're ready to actually do the run.  We don't check the return code; we let the run() method do that.
+        # now we're ready to actually do the run.  We don't check the return code; we let the run() method do that.
         print "Running:  %s -C%s -L%s" % (exe, cfg, logcfg)
 
         if logfile is None:
             return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], cwd=self.workdir)
         else:
-            with open(logfile,"w") as lf:
+            with open(logfile, "w") as lf:
                 return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf, cwd=self.workdir)
 
-## class for the hydrology code
+# class for the hydrology code
 
-### This is how you run the hydrology code from the command line:
-### matlab -nodisplay -nosplash -nodesktop -r "run_future_hydro('<gcm>','<scenario>');exit" > & outputs/pcm-a1-out.txt < /dev/null
+# This is how you run the hydrology code from the command line:
+# matlab -nodisplay -nosplash -nodesktop -r "run_future_hydro('<gcm>','<scenario>');exit" > & outputs/pcm-a1-out.txt < /dev/null
+
+
 class HydroModule(GcamModuleBase):
     """Provide the 'gcam-hydro' capability.
 
@@ -453,16 +456,16 @@ class HydroModule(GcamModuleBase):
      params:
        workdir - working directory
       inputdir - input directory
-     outputdir - output directory 
+     outputdir - output directory
            gcm - GCM outputs to use
       scenario - tag indicating the scenario to use.
          runid - tag indicating which ensemble member to use.
        logfile - file to direct the matlab code's output to
-     startmonth- month of year for first month in dataset. 1=Jan, 2=Feb, etc.  (OPTIONAL) 
+     startmonth- month of year for first month in dataset. 1=Jan, 2=Feb, etc.  (OPTIONAL)
     init-storage-file - Location of the file containing initial channel storage. Not
                         required (and ignored) if HistoricalHydroModule is present
-    
-     results: 
+
+     results:
        qoutfile - runoff grid (matlab format)
        foutfile - stream flow grid (matlab)
          cqfile - runoff grid (c format)
@@ -478,6 +481,7 @@ class HydroModule(GcamModuleBase):
     Module dependences: HistoricalHydroModule (optional)
 
     """
+
     def __init__(self, cap_tbl):
         """Add self to the capability table."""
         super(HydroModule, self).__init__(cap_tbl)
@@ -504,50 +508,49 @@ class HydroModule(GcamModuleBase):
         the 'init-storage-file' parameter.
 
         """
-        
-        workdir  = util.abspath(self.params["workdir"])
-        inputdir = util.abspath(self.params["inputdir"]) # input data from GCM
-        outputdir = util.abspath(self.params["outputdir"]) # destination for output files
-        gcm      = self.params["gcm"]
+
+        workdir = util.abspath(self.params["workdir"])
+        inputdir = util.abspath(self.params["inputdir"])  # input data from GCM
+        outputdir = util.abspath(self.params["outputdir"])  # destination for output files
+        gcm = self.params["gcm"]
         scenario = self.params["scenario"]
-        runid    = self.params["runid"] # identifier for the GCM ensemble member
-        logfile  = util.abspath(self.params["logfile"])
+        runid = self.params["runid"]  # identifier for the GCM ensemble member
+        logfile = util.abspath(self.params["logfile"])
         try:
             startmonth = int(self.params['startmonth'])
         except KeyError:
             startmonth = 1      # Default is to start at the beginning of the year
         print '[HydroModule]: start month = %d' % startmonth
 
-        ## ensure that output directory exists
+        # ensure that output directory exists
         util.mkdir_if_noexist(outputdir)
 
-        ## get initial channel storage from historical hydrology
-        ## module if available, or from self-parameters if not
+        # get initial channel storage from historical hydrology
+        # module if available, or from self-parameters if not
         if 'historical-hydro' in self.cap_tbl:
             hist_rslts = self.cap_tbl['historical-hydro'].fetch()
             initstorage = hist_rslts['chstorfile']
             self.results['hist-fout'] = hist_rslts['foutfile']
             self.results['hist-qout'] = hist_rslts['qoutfile']
         else:
-            ## matlab data file containing initial storage -- used
-            ## only if no historical hydro module.
-            initstorage = util.abspath(self.params["init-storage-file"]) 
+            # matlab data file containing initial storage -- used
+            # only if no historical hydro module.
+            initstorage = util.abspath(self.params["init-storage-file"])
             self.results['hist-fout'] = '/dev/null'
             self.results['hist-qout'] = '/dev/null'
 
-        
         if inputdir[-1] != '/':
             inputdir = inputdir + '/'
         if outputdir[-1] != '/':
             outputdir = outputdir + '/'
-        
-        ## we need to check existence of input and output files
-        prefile  = inputdir + 'pr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
+
+        # we need to check existence of input and output files
+        prefile = inputdir + 'pr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
         tempfile = inputdir + 'tas_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
-        dtrfile  = inputdir + 'dtr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        dtrfile = inputdir + 'dtr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
 
         print "input files:\n\t%s\n\t%s\n\t%s" % (prefile, tempfile, dtrfile)
-    
+
         msgpfx = "HydroModule:  "
         if not os.path.exists(prefile):
             raise IOError(msgpfx + "missing input file: " + prefile)
@@ -556,101 +559,101 @@ class HydroModule(GcamModuleBase):
         if not os.path.exists(dtrfile):
             raise IOError(msgpfx + "missing input file: " + dtrfile)
 
-        ## filename bases
+        # filename bases
         qoutbase = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid
         foutbase = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid
         boutbase = outputdir + 'basin_runoff_235_' + gcm + '_' + scenario + '_' + runid
         routbase = outputdir + 'rgn_runoff_235_'+gcm+'_' + scenario + '_' + runid
         petoutbase = outputdir + 'Avg_PET_235_' + gcm + '_' + scenario + '_' + runid
-        
-        ## matlab files for future processing steps 
-        qoutfile   = qoutbase + '.mat'
-        foutfile   = foutbase + '.mat'
+
+        # matlab files for future processing steps
+        qoutfile = qoutbase + '.mat'
+        foutfile = foutbase + '.mat'
         basinqfile = boutbase + '.mat'
-        rgnqfile   = routbase + '.mat'
+        rgnqfile = routbase + '.mat'
         petoutfile = petoutbase + '.mat'
-        ## c-data files for final output
-        cqfile     = qoutbase + '.dat'
-        cflxfile   = foutbase + '.dat'
+        # c-data files for final output
+        cqfile = qoutbase + '.dat'
+        cflxfile = foutbase + '.dat'
         cbasinqfile = boutbase + '.dat'
-        crgnqfile  = routbase + '.dat'
-        ## csv tables for diagnostics
-        basinqtblfile  = boutbase + '.csv'
-        rgnqtblfile    = routbase + '.csv'
-        
-        ## Our result is the location of these output files.  Set that
-        ## now, even though the files won't be created until we're
-        ## done running.
-        self.results['qoutfile']   = qoutfile
-        self.results['foutfile']   = foutfile
-        self.results['cqfile']     = cqfile 
-        self.results['cflxfile']   = cflxfile
+        crgnqfile = routbase + '.dat'
+        # csv tables for diagnostics
+        basinqtblfile = boutbase + '.csv'
+        rgnqtblfile = routbase + '.csv'
+
+        # Our result is the location of these output files.  Set that
+        # now, even though the files won't be created until we're
+        # done running.
+        self.results['qoutfile'] = qoutfile
+        self.results['foutfile'] = foutfile
+        self.results['cqfile'] = cqfile
+        self.results['cflxfile'] = cflxfile
         self.results['basinqfile'] = basinqfile
         self.results['cbasinqfile'] = cbasinqfile
-        self.results['rgnqfile']   = rgnqfile
-        self.results['crgnqfile']  = crgnqfile
-        self.results['basinqtbl']  = basinqtblfile
-        self.results['rgnqtbl']    = rgnqtblfile
+        self.results['rgnqfile'] = rgnqfile
+        self.results['crgnqfile'] = crgnqfile
+        self.results['basinqtbl'] = basinqtblfile
+        self.results['rgnqtbl'] = rgnqtblfile
         self.results['petoutfile'] = petoutfile
-        
-        ## We need to report the runid so that other modules that use
-        ## this output can name their files correctly.
-        self.results['runid']      = runid
+
+        # We need to report the runid so that other modules that use
+        # this output can name their files correctly.
+        self.results['runid'] = runid
 
         alloutfiles = [qoutfile, foutfile, cqfile, cflxfile, basinqfile, cbasinqfile,
                        rgnqfile, crgnqfile, basinqtblfile, rgnqtblfile, petoutfile]
         if not self.clobber and util.allexist(alloutfiles):
-            ## all files exist, and we don't want to clobber them
+            # all files exist, and we don't want to clobber them
             print "[HydroModule]:  results exist and no clobber.  Skipping."
-            self.results["changed"] = 0 # mark cached results as clean
+            self.results["changed"] = 0  # mark cached results as clean
             return 0        # success code
 
-        ## Get the location of the region mapping file.
+        # Get the location of the region mapping file.
         genparams = self.cap_tbl['general'].fetch()
-        gridrgn   = util.abspath('grid2rgn_nonag.csv',genparams['rgnconfig'])
-        
-        ## Run the matlab code.
-        ## TODO: eventually we need to move away from matlab, as it is not a
-        ##       suitable batch language.  Notably, if it encounters an error
-        ##       it will stop at a command prompt instead of exiting with an
-        ##       error code.  Yuck.
+        gridrgn = util.abspath('grid2rgn_nonag.csv', genparams['rgnconfig'])
 
-        ## Note that unlike the historical version, we don't have to
-        ## pass the names of the basin and region table files, since
-        ## the code can infer them from the basinqfile and rgnqfile
-        ## parameters. 
-        ## TODO: prune the number of filenames passed by inferring all
-        ## of the cfoofile filenames the same way.
+        # Run the matlab code.
+        # TODO: eventually we need to move away from matlab, as it is not a
+        # suitable batch language.  Notably, if it encounters an error
+        # it will stop at a command prompt instead of exiting with an
+        # error code.  Yuck.
+
+        # Note that unlike the historical version, we don't have to
+        # pass the names of the basin and region table files, since
+        # the code can infer them from the basinqfile and rgnqfile
+        # parameters.
+        # TODO: prune the number of filenames passed by inferring all
+        # of the cfoofile filenames the same way.
         print 'Running the matlab hydrology code'
-        with open(logfile,"w") as logdata, open("/dev/null", "r") as null:
-            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread','-r', 
+        with open(logfile, "w") as logdata, open("/dev/null", "r") as null:
+            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread', '-r',
                        "run_future_hydro('%s','%s','%s','%s','%s', %d, '%s','%s','%s', '%s','%s', '/dev/null');exit" %
-                       (prefile,tempfile,dtrfile,initstorage,gridrgn, startmonth, qoutfile,foutfile,petoutfile, basinqfile,rgnqfile)]
+                       (prefile, tempfile, dtrfile, initstorage, gridrgn, startmonth, qoutfile, foutfile, petoutfile, basinqfile, rgnqfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
                                   cwd=workdir)
             rc = sp.wait()
-        ## matlab often won't return an error code when it fails, so check to see that all files were created
+        # matlab often won't return an error code when it fails, so check to see that all files were created
         if util.allexist(alloutfiles):
             return rc
         else:
-            stderr.write('[HydroModule]: Some output files missing.  Check logfile (%s) for more information\n'%logfile)
+            stderr.write('[HydroModule]: Some output files missing.  Check logfile (%s) for more information\n' % logfile)
             return 1            # nonzero return code indicates failure
-    ## end of runmod()
+    # end of runmod()
 
 
 class HistoricalHydroModule(GcamModuleBase):
-    """Class for historical hydrology run.  
+    """Class for historical hydrology run.
 
     This is similar to, but not quite the same as, the main hydro module.
     params:
        workdir  - working directory for the matlab runs
-       inputdir - location of the input files    
+       inputdir - location of the input files
         gcm     - Which GCM to use (each has its own historical data)
        runid    - Tag indicating the run-id (e.g.  r1i1p1_195001_200512 )
-       outputdir- Destination directory for output    
+       outputdir- Destination directory for output
        logfile  - file to redirect matlab output to
       startmonth- month of year for first month in dataset (OPTIONAL)
-    
+
     results:
          qoutfile - runoff grid (matlab format)
          foutfile - stream flow grid (matlab format)
@@ -662,6 +665,7 @@ class HistoricalHydroModule(GcamModuleBase):
     module dependences:  none
 
     """
+
     def __init__(self, cap_tbl):
         """Add 'historical-hydro' capability to cap_tbl"""
         super(HistoricalHydroModule, self).__init__(cap_tbl)
@@ -669,7 +673,7 @@ class HistoricalHydroModule(GcamModuleBase):
 
     def runmod(self):
         """Run the historical hydrology code.
-        
+
         Before running, the module tests for the existence of the
         input files, and throws an exception (IOError) if any are
         missing.  It also tests for the expected output files, and if
@@ -679,31 +683,31 @@ class HistoricalHydroModule(GcamModuleBase):
         failure.
 
         """
-        workdir   = util.abspath(self.params['workdir'])
-        inputdir  = util.abspath(self.params['inputdir'])
+        workdir = util.abspath(self.params['workdir'])
+        inputdir = util.abspath(self.params['inputdir'])
         outputdir = util.abspath(self.params['outputdir'])
-        gcm       = self.params['gcm']
-        scenario  = 'historical'
-        runid     = self.params['runid']
-        logfile   = util.abspath(self.params['logfile'])
+        gcm = self.params['gcm']
+        scenario = 'historical'
+        runid = self.params['runid']
+        logfile = util.abspath(self.params['logfile'])
         try:
             startmonth = int(self.params['startmonth'])
         except KeyError:
             startmonth = 1      # Default is January
         print '[HistoricalHydroModule]: start month = %d' % startmonth
 
-        ## ensure output directory exists
+        # ensure output directory exists
         util.mkdir_if_noexist(outputdir)
 
         if inputdir[-1] != '/':
             inputdir = inputdir + '/'
         if outputdir[-1] != '/':
             outputdir = outputdir + '/'
-        
-        ## we need to check existence of input and output files
-        prefile  = inputdir + 'pr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
+
+        # we need to check existence of input and output files
+        prefile = inputdir + 'pr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
         tempfile = inputdir + 'tas_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
-        dtrfile  = inputdir + 'dtr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        dtrfile = inputdir + 'dtr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
 
         print "input files:\n\t%s\n\t%s\n\t%s" % (prefile, tempfile, dtrfile)
 
@@ -715,57 +719,59 @@ class HistoricalHydroModule(GcamModuleBase):
         if not os.path.exists(dtrfile):
             raise IOError(msgpfx + "missing input file: " + dtrfile)
 
-        ## output filenames
-        qoutfile      = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
-        petoutfile    = outputdir + 'Avg_PET_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        # output filenames
+        qoutfile = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        petoutfile = outputdir + 'Avg_PET_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
         basinqtblfile = outputdir + 'basin_runoff_235_' + gcm + '_' + scenario + '_' + runid + '.csv'
-        rgnqtblfile   = outputdir + 'rgn_runoff_235_' + gcm + '_' + scenario + '_' + runid + '.csv'        
-        foutfile      = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
-        chstorfile    = outputdir + 'InitChStor_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        rgnqtblfile = outputdir + 'rgn_runoff_235_' + gcm + '_' + scenario + '_' + runid + '.csv'
+        foutfile = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
+        chstorfile = outputdir + 'InitChStor_' + gcm + '_' + scenario + '_' + runid + '.mat'
 
-        ## Results will be these file names.  Set up the results
-        ## entries now, even though the files won't be ready yet.
+        # Results will be these file names.  Set up the results
+        # entries now, even though the files won't be ready yet.
         self.results['qoutfile'] = qoutfile
         self.results['foutfile'] = foutfile
         self.results['chstorfile'] = chstorfile
-        self.results['basinqtbl']  = basinqtblfile
-        self.results['rgnqtbl']    = rgnqtblfile
+        self.results['basinqtbl'] = basinqtblfile
+        self.results['rgnqtbl'] = rgnqtblfile
         self.results['petoutfile'] = petoutfile
 
-        ## Test to see if the outputs already exist.  If so, then we can skip these calcs.
+        # Test to see if the outputs already exist.  If so, then we can skip these calcs.
         alloutfiles = [qoutfile, foutfile, petoutfile, chstorfile, basinqtblfile, rgnqtblfile]
         if not self.clobber and util.allexist(alloutfiles):
             print "[HistoricalHydroModule]: results exist and no clobber set.  Skipping."
             self.results['changed'] = 0
             return 0        # success code
 
-
-        ## Get the location of the region mapping file.
+        # Get the location of the region mapping file.
         genparams = self.cap_tbl['general'].fetch()
-        gridrgn   = util.abspath('grid2rgn_nonag.csv',genparams['rgnconfig'],'HistoricalHydroModule')
+        gridrgn = util.abspath('grid2rgn_nonag.csv', genparams['rgnconfig'], 'HistoricalHydroModule')
         print '[HistoricalHydroModule]: gridrgn = %s ' % gridrgn
         print '[HistoricalHydroModule]: rgnconfig = %s ' % genparams['rgnconfig']
-        
-        ## If we get here, then we need to run the historical
-        ## hydrology.  Same comments apply as to the regular hydrology
-        ## module.
+
+        # If we get here, then we need to run the historical
+        # hydrology.  Same comments apply as to the regular hydrology
+        # module.
         print 'Running historical hydrology for gcm= %s   runid= %s' % (gcm, runid)
-        with open(logfile,'w') as logdata, open('/dev/null','r') as null:
-            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread','-r',
+        with open(logfile, 'w') as logdata, open('/dev/null', 'r') as null:
+            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread', '-r',
                        "run_historical_hydro('%s', '%s', '%s', '%s', %d, '%s', '%s','%s', '%s', '%s', '%s', '/dev/null');exit" %
-                       (prefile, tempfile, dtrfile, gridrgn, 1, chstorfile, qoutfile, foutfile,petoutfile, basinqtblfile, rgnqtblfile)]
+                       (prefile, tempfile, dtrfile, gridrgn, 1, chstorfile, qoutfile, foutfile, petoutfile, basinqtblfile, rgnqtblfile)]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
                                   cwd=workdir)
             rc = sp.wait()
-        ## check to see if the outputs were actually created; matlab will sometimes fail silently
+        # check to see if the outputs were actually created; matlab will sometimes fail silently
         if util.allexist(alloutfiles):
             return rc
         else:
-            stderr.write('[HistoricalHydroModule]: Some output files were not created.  Check logfile (%s) for details.\n'%logfile)
+            stderr.write(
+                '[HistoricalHydroModule]: Some output files were not created.  Check logfile (%s) for details.\n' % logfile)
             return 1            # nonzero indicates failure
-    
-### This is how you run the disaggregation code
-### matlab -nodisplay -nosplash -nodesktop -r "run_disaggregation('<runoff-file>', '<chflow-file>', '<gcam-filestem>');exit" >& <logfile> < /dev/null
+
+# This is how you run the disaggregation code
+# matlab -nodisplay -nosplash -nodesktop -r "run_disaggregation('<runoff-file>', '<chflow-file>', '<gcam-filestem>');exit" >& <logfile> < /dev/null
+
+
 class WaterDisaggregationModule(GcamModuleBase):
     """Class for the water demand disaggregation calculation
 
@@ -804,7 +810,7 @@ class WaterDisaggregationModule(GcamModuleBase):
                      ignored otherwise.  Location for relative paths
                      is workdir (so 'inputs/water-transfer.csv' will
                      put it in the inputs directory for GCAMhydro)
-    
+
     results: c-style binary files for each of the following variables
               (the key is the variable name; the value is the
               filename): "wdtotal", "wddom", "wdelec", "wdirr",
@@ -817,14 +823,14 @@ class WaterDisaggregationModule(GcamModuleBase):
           the result is precalculated.
 
     """
-    
+
     def __init__(self, cap_tbl):
         super(WaterDisaggregationModule, self).__init__(cap_tbl)
         cap_tbl["water-disaggregation"] = self
 
     def runmod(self):
         """Run the water demand disaggregation calculation.
-        
+
         Does some simple consistency checking on the input parameters,
         and returns a failure code if errors are found.  Then checks
         to see if expected outputs already exist.  If so, the
@@ -834,50 +840,50 @@ class WaterDisaggregationModule(GcamModuleBase):
         results are added to the results dictionary.
 
         """
-        
+
         import gcam.water.waterdisag as waterdisag
 
-        workdir  = self.params["workdir"]
+        workdir = self.params["workdir"]
 
-        hydro_rslts = self.cap_tbl["gcam-hydro"].fetch() # hydrology module
-        genparams   = self.cap_tbl['general'].fetch()   # general parameters
+        hydro_rslts = self.cap_tbl["gcam-hydro"].fetch()  # hydrology module
+        genparams = self.cap_tbl['general'].fetch()   # general parameters
 
         if 'dbxml' in self.params:
             if 'gcam-core' in self.cap_tbl:
-                stdout.write('[WaterDisaggregationModule]: WARNING - gcam module included and dbfile specified.  Using dbfile and ignoring module.\n')
-            gcam_rslts = {'dbxml' : self.params['dbxml'],
-                          'changed' : False} 
+                stdout.write(
+                    '[WaterDisaggregationModule]: WARNING - gcam module included and dbfile specified.  Using dbfile and ignoring module.\n')
+            gcam_rslts = {'dbxml': self.params['dbxml'],
+                          'changed': False}
         else:
-            gcam_rslts = self.cap_tbl["gcam-core"].fetch() # gcam core module
+            gcam_rslts = self.cap_tbl["gcam-core"].fetch()  # gcam core module
 
-        
-        runoff_file   = hydro_rslts["qoutfile"]
-        chflow_file   = hydro_rslts["foutfile"]
-        basinqfile    = hydro_rslts["basinqfile"]
-        rgnqfile      = hydro_rslts["rgnqfile"]
-        runid         = hydro_rslts["runid"]
-        dbxmlfile     = util.abspath(gcam_rslts["dbxml"])
-        outputdir     = util.abspath(self.params["outputdir"])
-        tempdir       = util.abspath(self.params["tempdir"])  # location for intermediate files produced by dbxml queries
-        scenariotag   = self.params["scenario"]
+        runoff_file = hydro_rslts["qoutfile"]
+        chflow_file = hydro_rslts["foutfile"]
+        basinqfile = hydro_rslts["basinqfile"]
+        rgnqfile = hydro_rslts["rgnqfile"]
+        runid = hydro_rslts["runid"]
+        dbxmlfile = util.abspath(gcam_rslts["dbxml"])
+        outputdir = util.abspath(self.params["outputdir"])
+        tempdir = util.abspath(self.params["tempdir"])  # location for intermediate files produced by dbxml queries
+        scenariotag = self.params["scenario"]
         hist_chflow_file = hydro_rslts['hist-fout']
         hist_runoff_file = hydro_rslts['hist-qout']
 
         rgnconfig = genparams['rgnconfig']
 
-        ## ensure that output and temp directories exist
+        # ensure that output and temp directories exist
         util.mkdir_if_noexist(outputdir)
         util.mkdir_if_noexist(tempdir)
 
         if 'inputdir' in self.params:
-            inputdir = self.params['inputdir'] # static inputs, such as irrigation share and query files.
+            inputdir = self.params['inputdir']  # static inputs, such as irrigation share and query files.
         else:
             inputdir = genparams['inputdir']
         print '[WaterDisaggregationModule]: inputdir = %s' % inputdir
 
-        ## Parse the water transfer parameters.
+        # Parse the water transfer parameters.
         if 'water-transfer' in self.params:
-            transfer      = util.parseTFstring(self.params['water-transfer'])
+            transfer = util.parseTFstring(self.params['water-transfer'])
             try:
                 transfer_file = util.abspath(self.params['transfer-file'], workdir)
             except KeyError:
@@ -885,43 +891,43 @@ class WaterDisaggregationModule(GcamModuleBase):
                 return 5
         else:
             transfer = False
-            transfer_file = '/dev/null' # won't be used by the matlab program, but we still need a placeholder
+            transfer_file = '/dev/null'  # won't be used by the matlab program, but we still need a placeholder
 
         if 'power-plant-data' in self.params:
             ppinfile = self.params['power-plant-data']
-            wfcoal = self.params.get('waterfac-coal') # get() suplies None as a default value
+            wfcoal = self.params.get('waterfac-coal')  # get() suplies None as a default value
             wfgas = self.params.get('waterfac-gas')
             wfnuc = self.params.get('waterfac-nuc')
-                
-            ppgrid_data = waterdisag.pplant_proc(ppinfile,tempdir, wfcoal, wfgas, wfnuc)
+
+            ppgrid_data = waterdisag.pplant_proc(ppinfile, tempdir, wfcoal, wfgas, wfnuc)
             ppflag = 1
         else:
-            ppgrid_data = '/dev/null' # matlab prog will detect and use fallback.
+            ppgrid_data = '/dev/null'  # matlab prog will detect and use fallback.
             ppflag = 0
-            
+
         self.results['water-transfer'] = transfer
-        ## append the transfer status to the scenario tag
+        # append the transfer status to the scenario tag
         if transfer:
             scenariotag = scenariotag + 'wT'
         else:
-            scenariotag = scenariotag + 'wF' 
+            scenariotag = scenariotag + 'wF'
         print 'scenariotag = %s' % scenariotag
 
-        ## Initialize the waterdisag module
+        # Initialize the waterdisag module
         waterdisag.init_rgn_tables(rgnconfig)
 
-        ## Helper function generator
+        # Helper function generator
         def get_dir_prepender(dir):
-            if dir[-1]=='/':
+            if dir[-1] == '/':
                 return lambda file: dir+file
             else:
                 return lambda file: dir+'/'+file
 
-        inputdirprep  = get_dir_prepender(inputdir)
+        inputdirprep = get_dir_prepender(inputdir)
         tempdirprep = get_dir_prepender(tempdir)
-        outdirprep  = get_dir_prepender(outputdir)
-        rgndirprep  = get_dir_prepender(rgnconfig)
-        
+        outdirprep = get_dir_prepender(outputdir)
+        rgndirprep = get_dir_prepender(rgnconfig)
+
         vars = ["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi",
                 "basin-supply", "basin-wdtot", "basin-wddom", "basin-wdelec", "basin-wdirr", "basin-wdliv", "basin-wdmfg", "basin-wdmin", "basin-wsi",
                 "rgn-supply", "rgn-wdtot", "rgn-wddom", "rgn-wdelec", "rgn-wdirr", "rgn-wdliv", "rgn-wdmfg", "rgn-wdmin", "rgn-wsi"]
@@ -933,8 +939,7 @@ class WaterDisaggregationModule(GcamModuleBase):
                 print 'File %s does not exist.  Running WaterDisaggregationModule.\n' % filename
                 allfiles = 0
 
-        
-        pop_demo_file = outdirprep("pop-demo.csv") # changed this to use the same region ordering in the water data.
+        pop_demo_file = outdirprep("pop-demo.csv")  # changed this to use the same region ordering in the water data.
         self.results['pop-demo'] = pop_demo_file
 
         if allfiles and not self.clobber and not (gcam_rslts["changed"] or hydro_rslts["changed"]):
@@ -942,80 +947,82 @@ class WaterDisaggregationModule(GcamModuleBase):
             self.results["changed"] = 0
             return 0
 
-
         print 'disaggregation results:\n%s' % str(self.results)
-        
+
         queryfiles = ['batch-land-alloc.xml', 'batch-population.xml', 'batch-water-ag.xml',
                       'batch-water-dom.xml', 'batch-water-elec.xml', 'batch-water-livestock.xml',
                       'batch-water-mfg.xml', 'batch-water-mining-alt.xml']
-        outfiles   = ['batch-land-alloc.csv', 'batch-population.csv', 'batch-water-ag.csv',
-                      'batch-water-dom.csv', 'batch-water-elec.csv', 'batch-water-livestock.csv',
-                      'batch-water-mfg.csv', 'batch-water-mining.csv']
+        outfiles = ['batch-land-alloc.csv', 'batch-population.csv', 'batch-water-ag.csv',
+                    'batch-water-dom.csv', 'batch-water-elec.csv', 'batch-water-livestock.csv',
+                    'batch-water-mfg.csv', 'batch-water-mining.csv']
         queryfiles = map(inputdirprep, queryfiles)
         outfiles = map(tempdirprep, outfiles)
         util.gcam_query(queryfiles, dbxmlfile, inputdir, outfiles)
 
-        ### reformat the GCAM outputs into the files the matlab code needs 
-        ### note all the csv files referred to here are temporary
-        ### files.  On the input side the names need to match the ones
-        ### used in the configuration of the gcam model interface
-        ### queries, and on the output side they must match the ones
-        ### used in the matlab disaggregation code.
+        # reformat the GCAM outputs into the files the matlab code needs
+        # note all the csv files referred to here are temporary
+        # files.  On the input side the names need to match the ones
+        # used in the configuration of the gcam model interface
+        # queries, and on the output side they must match the ones
+        # used in the matlab disaggregation code.
 
-        ## non-ag demands (sadly, I didn't think to put the lists
-        ## above in the order we were planning to use them.)
-        wddom   = waterdisag.proc_wdnonag(outfiles[3], tempdirprep("withd_dom.csv"))
-        wdelec  = waterdisag.proc_wdnonag(outfiles[4], tempdirprep("withd_elec.csv"))
-        wdman   = waterdisag.proc_wdnonag(outfiles[6], tempdirprep("withd_mfg.csv"))
-        wdmin   = waterdisag.proc_wdnonag(outfiles[7], tempdirprep("withd_min.csv"))
+        # non-ag demands (sadly, I didn't think to put the lists
+        # above in the order we were planning to use them.)
+        wddom = waterdisag.proc_wdnonag(outfiles[3], tempdirprep("withd_dom.csv"))
+        wdelec = waterdisag.proc_wdnonag(outfiles[4], tempdirprep("withd_elec.csv"))
+        wdman = waterdisag.proc_wdnonag(outfiles[6], tempdirprep("withd_mfg.csv"))
+        wdmin = waterdisag.proc_wdnonag(outfiles[7], tempdirprep("withd_min.csv"))
 
-        ## population data
+        # population data
         waterdisag.proc_pop(outfiles[1], tempdirprep("pop_fac.csv"), tempdirprep("pop_tot.csv"), pop_demo_file)
 
-        ## livestock demands
-        wdliv  = waterdisag.proc_wdlivestock(outfiles[5], tempdirprep("withd_liv.csv"), tempdirprep('rgn_tot_withd_liv.csv'))
+        # livestock demands
+        wdliv = waterdisag.proc_wdlivestock(outfiles[5], tempdirprep(
+            "withd_liv.csv"), tempdirprep('rgn_tot_withd_liv.csv'))
 
-        ## agricultural demands and auxiliary quantities
+        # agricultural demands and auxiliary quantities
         gcam_irr = waterdisag.proc_ag_area(outfiles[0], tempdirprep("irrA.csv"))
         waterdisag.proc_ag_vol(outfiles[2], tempdirprep("withd_irrV.csv"))
 
         if not gcam_irr:
-            ## If GCAM didn't produce endogeneous irrigated and
-            ## rain-fed land allocations, then we need to read in some
-            ## precalculated irrigation shares.
+            # If GCAM didn't produce endogeneous irrigated and
+            # rain-fed land allocations, then we need to read in some
+            # precalculated irrigation shares.
             waterdisag.proc_irr_share(rgndirprep('irrigation-frac.csv'), tempdirprep("irrS.csv"))
             read_irrS = 1       # argument to matlab code
         else:
             read_irrS = 0
 
-        ## Run the disaggregation model
+        # Run the disaggregation model
         if transfer:
             tflag = 1
         else:
             tflag = 0
 
-        matlabdata = {'runoff':runoff_file, 'chflow':chflow_file,
-                      'histrunoff':hist_runoff_file,
-                      'histchflow':hist_chflow_file, 'basinqfile':basinqfile,
-                      'rgnqfile':rgnqfile, 'rgnconfig':rgnconfig, 'tempdir':tempdir,
-                      'ppgrid':ppgrid_data, 'ppflg':ppflag,
-                      'outputdir':outputdir, 'scenario':scenariotag,
-                      'runid':runid, 'trnflag':tflag, 'trnfile':transfer_file,
-                      'rdirrS':read_irrS}
+        matlabdata = {'runoff': runoff_file, 'chflow': chflow_file,
+                      'histrunoff': hist_runoff_file,
+                      'histchflow': hist_chflow_file, 'basinqfile': basinqfile,
+                      'rgnqfile': rgnqfile, 'rgnconfig': rgnconfig, 'tempdir': tempdir,
+                      'ppgrid': ppgrid_data, 'ppflg': ppflag,
+                      'outputdir': outputdir, 'scenario': scenariotag,
+                      'runid': runid, 'trnflag': tflag, 'trnfile': transfer_file,
+                      'rdirrS': read_irrS}
         matlabfn = "run_disaggregation('{runoff}', '{chflow}', '{histrunoff}', '{histchflow}', '{basinqfile}', '{rgnqfile}', '{rgnconfig}', '{tempdir}', {ppflg:d}, '{ppgrid}', '{outputdir}', '{scenario}', '{runid}', {trnflag:d}, '{trnfile}', {rdirrS:d}); exit".format(**matlabdata)
         print 'current dir: %s ' % os.getcwd()
         print 'matlab fn:  %s' % matlabfn
-        with open(self.params["logfile"],"w") as logdata, open("/dev/null","r") as null:
-            arglist = ["matlab", "-nodisplay", "-nosplash", "-nodesktop", '-singleCompThread',"-r", 
-                        matlabfn]
+        with open(self.params["logfile"], "w") as logdata, open("/dev/null", "r") as null:
+            arglist = ["matlab", "-nodisplay", "-nosplash", "-nodesktop", '-singleCompThread', "-r",
+                       matlabfn]
 
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
-                                  cwd=workdir) 
+                                  cwd=workdir)
             return sp.wait()
-        
-    ## end of runmod
-        
-## class for the netcdf-demo builder
+
+    # end of runmod
+
+# class for the netcdf-demo builder
+
+
 class NetcdfDemoModule(GcamModuleBase):
     """Module to build NetCDF output for the February 2015 demo.
 
@@ -1030,6 +1037,7 @@ class NetcdfDemoModule(GcamModuleBase):
     Module dependences:  HydroModule, WaterDisaggregationModule
 
     """
+
     def __init__(self, cap_tbl):
         super(NetcdfDemoModule, self).__init__(cap_tbl)
         cap_tbl['netcdf-demo'] = self
@@ -1041,24 +1049,24 @@ class NetcdfDemoModule(GcamModuleBase):
 
         print 'water_rslts:\n%s' % str(water_rslts)
 
-        chflow_file  = hydro_rslts['cflxfile']
-        transfer     = water_rslts['water-transfer']
+        chflow_file = hydro_rslts['cflxfile']
+        transfer = water_rslts['water-transfer']
 
         rcp = self.params['rcp']
         pop = self.params['pop']
         gdp = 10.0              # Dummy value; we didn't implement the GDP scenarios.
         outfile = util.abspath(self.params['outfile'])
-        mat2nc  = util.abspath(self.params['mat2nc'],os.getcwd())
-        
+        mat2nc = util.abspath(self.params['mat2nc'], os.getcwd())
+
         self.results['outfile'] = outfile
 
-        ## ensure that the directory the output file is being written to exists
+        # ensure that the directory the output file is being written to exists
         util.mkdir_if_noexist(os.path.dirname(outfile))
-        
+
         try:
-            ## create a temporary file to hold the config
+            # create a temporary file to hold the config
             (fd, tempfilename) = tempfile.mkstemp()
-            cfgfile = os.fdopen(fd,"w")
+            cfgfile = os.fdopen(fd, "w")
 
             cfgfile.write('%s\n%s\n%s\n' % (rcp, pop, gdp))
             cfgfile.write('%s\n' % outfile)
@@ -1068,7 +1076,7 @@ class NetcdfDemoModule(GcamModuleBase):
                 cfgfile.write('%s\n' % chflow_file)
             for var in ['wdirr', 'wdliv', 'wdelec', 'wdmfg', 'wdtotal', 'wddom', 'wsi']:
                 if transfer:
-                    ## for water transfer cases, we don't have any gridded data, so substitute a grid full of NaN.
+                    # for water transfer cases, we don't have any gridded data, so substitute a grid full of NaN.
                     cfgfile.write('no-data\n')
                 else:
                     cfgfile.write('%s\n' % water_rslts[var])
