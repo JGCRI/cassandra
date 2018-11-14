@@ -1,5 +1,3 @@
 Module Name,Config Section
 GlobalParamsModule,Global
-HydroModule,HydroModule
-WaterDisaggregationModule,WaterDisaggregationModule
-HistoricalHydroModule,HistoricalHydroModule
+FldgenModule,FldgenModule

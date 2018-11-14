@@ -39,7 +39,7 @@ def gcam_parse(cfgfile_name):
             print("Module init statement: {}\n".format(mod_create))
 
             module = eval(mod_create)
-            module.params = config[mod_config_section]
+            module.params.update(config[mod_config_section])
             module.finalize_parsing()
             module_list.append(module)
 
