@@ -20,12 +20,12 @@ def gcam_parse(cfgfile_name):
     # initialize the structures that will receive the data we are
     # parsing from the file
     capability_table = {}
-    module_list = []
+    component_list = []
 
     # cfgfile_name is a filename
     with open(cfgfile_name, "r") as cfgfile:
         section = None
-        module = None
+        component = None
         sectnpat = re.compile(r'\[(.+)\]')
         keyvalpat = re.compile(r'(.+)=(.+)')
 
@@ -37,26 +37,26 @@ def gcam_parse(cfgfile_name):
             if(line == "" or line[0] == '#'):
                 continue
 
-            # check for section header.  Section headers appear in square brackets:  [gcam_module]
+            # check for section header.  Section headers appear in square brackets:  [gcam_component]
             sectnmatch = sectnpat.match(line)
             if sectnmatch:
                 section = sectnmatch.group(1)
                 print "parser starting section:  %s" % section
 
                 if not section.lower() == "global":
-                    # Section header starts a new module
-                    # create the new module:  the section name is the module class
+                    # Section header starts a new component
+                    # create the new component:  the section name is the component class
                     # TODO: is the input from the config file trusted enough to do it this way?
-                    modcreate = "%s(capability_table)" % section
-                    print "modcreate statement:  %s\n" % modcreate
-                    module = eval(modcreate)
+                    component_create = "%s(capability_table)" % section
+                    print "component_create statement:  %s\n" % component_create
+                    component = eval(component_create)
                 else:
                     # This is kind of a wart because I want to call
                     # the section "global", but I don't want to have
-                    # a module called "global".
-                    module = GlobalParamsModule(capability_table)
+                    # a component called "global".
+                    component = GlobalParamsComponent(capability_table)
 
-                module_list.append(module)
+                component_list.append(component)
                 continue        # nothing further to do for a section header line
 
             # If we get this far, we have a nonblank line that is not a
@@ -74,16 +74,16 @@ def gcam_parse(cfgfile_name):
 
             print "parser got key= %s\tval= %s" % (key, val)
 
-            module.addparam(key, val)
+            component.addparam(key, val)
 
         # end of loop over config file lines
     # end of with block:  config file will be closed
 
-    # close out the parameter processing for all modules in the list
-    for module in module_list:
-        module.finalize_parsing()
+    # close out the parameter processing for all components in the list
+    for component in component_list:
+        component.finalize_parsing()
 
-    return (module_list, capability_table)
+    return (component_list, capability_table)
 # end of gcam_parse
 
 
@@ -92,12 +92,12 @@ if __name__ == "__main__":
     import os
 
     # arrange so that when run from the top-level directory we still find
-    # the modules we want to load.
+    # the components we want to load.
     sys.path.append(os.getcwd()+'/src')
-    from gcam.modules import *
+    from gcam.components import *
 
     try:
-        (modlist, cap_table) = gcam_parse(sys.argv[1])
+        (component_list, cap_table) = gcam_parse(sys.argv[1])
     except IndexError:
         print __doc__
         sys.exit(0)
@@ -108,24 +108,24 @@ if __name__ == "__main__":
 
     threads = []
 
-    for module in modlist:
-        print "running %s" % module.__class__
-        threads.append(module.run())
+    for component in component_list:
+        print "running %s" % component.__class__
+        threads.append(component.run())
 
     # Wait for all threads to complete before printing end message.
     for thread in threads:
         thread.join()
 
-    # Check to see if any of the modules failed
+    # Check to see if any of the components failed
     fail = 0
-    for module in modlist:
-        if module.status != 1:
-            print 'Module %s returned failure status\n' % str(module.__class__)
+    for component in component_list:
+        if component.status != 1:
+            print 'Component %s returned failure status\n' % str(component.__class__)
             fail += 1
 
     if fail == 0:
-        print '\n****************All modules completed successfully.'
+        print '\n****************All components completed successfully.'
     else:
-        print '\n****************%d modules failed.' % fail
+        print '\n****************%d components failed.' % fail
 
     print "\nFIN."

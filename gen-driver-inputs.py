@@ -39,7 +39,7 @@ rgnconfig = rgnchn
 """)
 
                 # write hydro section
-                cfg.write('[HydroModule]\nworkdir = ../gcam-hydro\n' +
+                cfg.write('[HydroComponent]\nworkdir = ../gcam-hydro\n' +
                           'inputdir = /pic/scratch/rpl/CMIP5_preprocessed\n' +
                           'outputdir = output/cmip5\n' +
                           'init-storage-file = ../gcam-hydro/inputs/initstorage.mat\n' +
@@ -52,7 +52,7 @@ rgnconfig = rgnchn
 
                 # write historical hydro section
                 cfg.write("""
-[HistoricalHydroModule]
+[HistoricalHydroComponent]
 workdir = ../gcam-hydro
 inputdir = /pic/scratch/rpl/CMIP5_preprocessed
 outputdir = output/cmip5
@@ -64,7 +64,7 @@ runid = r1i1p1_195001_200512
                 cfg.write('logfile = ../gcam-hydro/logs/%s\n' % hlogname)
 
                 # write GCAM section
-                cfg.write('\n[GcamModule]\nexe = /people/link593/wrk/china-water-all/GCAM_4.0_r5465_User_Package_with_code_Unix/Main_User_Workspace/exe/gcam.exe\n' +
+                cfg.write('\n[GcamComponent]\nexe = /people/link593/wrk/china-water-all/GCAM_4.0_r5465_User_Package_with_code_Unix/Main_User_Workspace/exe/gcam.exe\n' +
                           'logconfig = /people/link593/wrk/china-water-all/GCAM_4.0_r5465_User_Package_with_code_Unix/Main_User_Workspace/exe/log_conf.xml\n' +
                           'clobber = False\n')
                 gcam_scen = gcam_scen_str[scen]
@@ -73,9 +73,9 @@ runid = r1i1p1_195001_200512
                 gcam_stdout = '/people/link593/wrk/china-water-all/GCAM_4.0_r5465_User_Package_with_code_Unix/Main_User_Workspace/exe/logs/%s-sdout-log.txt' % runname
                 cfg.write('logfile = %s\n' % gcam_stdout)
 
-                # write water disaggregation section.  Most of this is boilerplate, since the module
+                # write water disaggregation section.  Most of this is boilerplate, since the component
                 # figures out many of its own filenames
-                cfg.write('\n[WaterDisaggregationModule]\n' +
+                cfg.write('\n[WaterDisaggregationComponent]\n' +
                           'workdir = ../gcam-hydro\n' +
                           'inputdir = ./input-data\n' +
                           'clobber = %s\n' % clobber_disag)
@@ -100,7 +100,7 @@ runid = r1i1p1_195001_200512
                 cfg.write('power-plant-data = ./input-data/power-plants.geojson\n')
 
                 # write the netcdf production section.
-                cfg.write('\n[NetcdfDemoModule]\nmat2nc = ./src/C/mat2nc\n')
+                cfg.write('\n[NetcdfDemoComponent]\nmat2nc = ./src/C/mat2nc\n')
                 # figure out the metadata descriptors
                 rcpval = float(scen[-2:])/10.0
                 popval = float(pop[-2:])

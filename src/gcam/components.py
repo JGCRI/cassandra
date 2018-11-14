@@ -1,39 +1,37 @@
-"""Definitions for the modules for GCAM and associated downstream models.
+"""Definitions for the components for GCAM and associated downstream models.
 
-We use the word "module" here in a bit of a nonstandard way.  A GCAM
-"module" is a functional unit that performs a specific step in the
-GCAM processing pipeline.  These modules are distinct from python
-modules; a GCAM module may be implemented in one or several python
-modules of its own (as in the water disaggregation module), or it may
-be completely contained in this module.
+A GCAM "component" is a functional unit that performs a specific step in
+the GCAM processing pipeline. A GCAM component may be implemented in one or
+several python components of its own (as in the water disaggregation
+component), or it may be completely contained in this component.
 
 Classes:
 
-GcamModuleBase    - Base class for all GCAM modules.  Provides the
-                    interface, as well as services like managing
-                    threads, locks, and condition variables.
+GcamComponentBase     - Base class for all GCAM components.  Provides the
+                        interface, as well as services like managing
+                        threads, locks, and condition variables.
 
-GlobalParamsModule - Store parameters common to all modules.
+GlobalParamsComponent - Store parameters common to all components.
 
-GcamModule        - Run the GCAM core model.
+GcamComponent         - Run the GCAM core model.
 
-HydroModule       - Run the future hydrology calculation.
+HydroComponent        - Run the future hydrology calculation.
 
-HistoricalHydroModule - Run the historical hydrology calculation.
+HistoricalHydroComponent - Run the historical hydrology calculation.
 
-WaterDisaggregationModule - Run the water disaggregation calculation.
+WaterDisaggregationComponent - Run the water disaggregation calculation.
 
-NetcdfDemoModule  - Package outputs into a netCDF file for the
-                    Decision Theater Demo.
+NetcdfDemoComponent   - Package outputs into a netCDF file for the
+                        Decision Theater Demo.
 
 """
 
 # TODO: many of these classes have gotten a bit long.  It would be
 # better to refactor them so that the main functionality is
-# implemented in a separate python module for each GCAM module, with
-# the GCAM module subclass providing a thin wrapper that grabs inputs
-# needed from other modules and passes them to a main function in the
-# relevant python module.
+# implemented in a separate python component for each GCAM component, with
+# the GCAM component subclass providing a thin wrapper that grabs inputs
+# needed from other components and passes them to a main function in the
+# relevant python component.
 
 import os
 import os.path
@@ -46,37 +44,37 @@ from sys import stderr
 from gcam import util
 
 
-class GcamModuleBase(object):
-    """Common base class for all of the GCAM modules (i.e., functional units).
+class GcamComponentBase(object):
+    """Common base class for all of the GCAM components (i.e., functional units).
 
-    We can put any utility functions that are common to all modules
+    We can put any utility functions that are common to all components
     here, but its main purpose is to provide all the multithreading
-    functionality so that the individual modules can focus
+    functionality so that the individual components can focus
     exclusively on doing their particular tasks.
 
     Methods that shouldn't be overridden:
 
-    run(): start the module running.  The params argument should
-           be a dictionary containing the parameters the module
+    run(): start the component running.  The params argument should
+           be a dictionary containing the parameters the component
            needs (probably parsed from the initial config).  Each
-           subclass should provide a method called runmod() that
-           performs the module's work; that method will be called
-           from run().  The runmod() method should return 0 on
-           successful completion.  Note that we don't make any
-           effort to limit the number of concurrent threads beyond
-           the inherent limitations imposed by data dependencies
-           between the modules.  This method returns the thread
-           object, mainly so that the driver can call join() on
-           all of the module threads.
+           subclass should provide a method called run_component()
+           that performs the component's work; that method will be
+           called from run().  The run_component() method should
+           return 0 on successful completion.  Note that we don't
+           make any effort to limit the number of concurrent threads
+           beyond the inherent limitations imposed by data
+           dependencies between the components.  This method returns
+           the thread object, mainly so that the driver can call
+           join() on all of the component threads.
            TODO: implement an active thread counter.
 
-    runmod_wrapper(): used internally by run().  Don't monkey around
-                      with this function.
+    run_component_wrapper(): used internally by run().  Don't monkey around
+                             with this function.
 
-    fetch(): retrieve the module's results.  If the module hasn't
+    fetch(): retrieve the component's results.  If the component hasn't
              completed yet, wait to be notified of completion.  This
              mechanism implicitly enforces correct ordering between
-             modules.  Note that we don't make any checks for
+             components.  Note that we don't make any checks for
              deadlock caused by circular dependencies.
 
     addparam(): Add a key and value to the params array.  Generally
@@ -86,9 +84,9 @@ class GcamModuleBase(object):
          to call the base method):
 
     __init__(): initialization, obviously, but each init method must
-                take an extra argument that is a dictionary of module
+                take an extra argument that is a dictionary of component
                 capabilities, and it must add its own capabilities to
-                this dictionary (see modules below for examples).
+                this dictionary (see components below for examples).
                 The base class init stores a reference to the
                 capability table for future lookup.
 
@@ -97,15 +95,15 @@ class GcamModuleBase(object):
                 to do any processing that needs to be done (e.g.,
                 converting strings to other types).  The base class
                 version of the method does this for parameters that
-                are applicable to all modules, so it must always be
+                are applicable to all components, so it must always be
                 called if the method is overridden.
 
     Methods that can be overridden freely
 
-    runmod(): function that does the module's work.  It should only be
-              called from the runmod_wrapper() method via the run()
+    run_component(): function that does the component's work.  It should only be
+              called from the run_component_wrapper() method via the run()
               method.  Together, these methods perform the additional
-              bookkeeping required to ensure that modules don't try to
+              bookkeeping required to ensure that components don't try to
               use results before they are ready.
 
     Attributes:
@@ -117,12 +115,12 @@ class GcamModuleBase(object):
     """
 
     def __init__(self, cap_tbl):
-        """Initialize the GCAM module base.
+        """Initialize the GCAM component base.
 
         Every subclass __init__ method should call this method as its
         first action.  The cap_tbl argument is a dictionary linking
         capabilities (i.e., tags for identifying functional units)
-        with the modules that provide those capabilities.  Subclasses
+        with the components that provide those capabilities.  Subclasses
         should extend this method by adding their self reference to
         the table under an appropriate tag.  E.g.:
 
@@ -131,8 +129,8 @@ class GcamModuleBase(object):
         The capability table will be available as self.cap_tbl for use
         in a subclass's methods.  Since gcam_driver passes the same
         capacity table to each subclass instance initialization, by
-        the time a module starts running the table will contain an
-        index of all the active modules in the calculation.
+        the time a component starts running the table will contain an
+        index of all the active components in the calculation.
 
         """
         self.status = 0         # status indicator: 0- not yet run, 1- complete, 2- error
@@ -143,16 +141,16 @@ class GcamModuleBase(object):
         self.condition = threading.Condition()
 
     def run(self):
-        """Execute the module's runmod() method in a separate thread."""
-        thread = threading.Thread(target=lambda: self.runmod_wrapper())
+        """Execute the component's run_component() method in a separate thread."""
+        thread = threading.Thread(target=lambda: self.run_component_wrapper())
         thread.start()
         # returns immediately
         return thread
 
-    def runmod_wrapper(self):
-        """Lock the condition variable, execute runmod(), and unlock when it returns.
+    def run_component_wrapper(self):
+        """Lock the condition variable, execute run_component(), and unlock when it returns.
 
-        At the conclusion of the runmod() method, self.status will be
+        At the conclusion of the run_component() method, self.status will be
         set to 1 if the run was successful, to 2 otherwise.  This
         variable will be used by the fetch() method to notify clients
         if a run failed.  Either way, threads waiting on the condition
@@ -171,15 +169,15 @@ class GcamModuleBase(object):
         """
 
         # This block holds the lock on the condition variable for the
-        # entire time the runmod() method is running.  That's ok for
+        # entire time the run_component() method is running.  That's ok for
         # now, but it's not ideal, and it will cause problems when we
         # eventually try to implement co-simulations.
         with self.condition:
             try:
-                rv = self.runmod()
+                rv = self.run_component()
                 if not rv == 0:
                     # possibly add some other error handling here.
-                    raise RuntimeError("%s:  runmod returned error code %s" % (self.__class__, str(rv)))
+                    raise RuntimeError("%s:  run_component returned error code %s" % (self.__class__, str(rv)))
                 else:
                     stdout.write("%s: finished successfully.\n" % (self.__class__))
 
@@ -198,21 +196,21 @@ class GcamModuleBase(object):
         asynchronously.  This method waits if necessary and returns
         the results, checks whether the run was successful (indicated
         by self.status), and if so returns the results dictionary.  If
-        the runmod() method failed, the variable will so indicate, and
+        the run_component() method failed, the variable will so indicate, and
         an exception will be raised.
 
         """
 
-        # If the module is currently running, then the condition
+        # If the component is currently running, then the condition
         # variable will be locked, and we will block when the 'with'
         # statement tries to obtain the lock.
         with self.condition:
-            if self.status == 0:                  # module hasn't run yet.  Wait on it
+            if self.status == 0:                  # component hasn't run yet.  Wait on it
                 print "\twaiting on %s\n" % self.__class__
                 self.condition.wait()
         # end of with block:  lock is released
 
-        # By this point, the module should have run.  If status is not success, then
+        # By this point, the component should have run.  If status is not success, then
         # there has been an error.
         if self.status != 1:
             raise RuntimeError("%s: wait() returned with non-success status!" % self.__class__)
@@ -220,10 +218,10 @@ class GcamModuleBase(object):
         return self.results
 
     def finalize_parsing(self):
-        """Process parameters that are common to all modules (e.g. clobber).
+        """Process parameters that are common to all components (e.g. clobber).
 
-        The modules will be responsible for processing their own
-        special parameters.  If a module needs to override this
+        The components will be responsible for processing their own
+        special parameters.  If a component needs to override this
         method, it should be sure to call the base version too.
 
         """
@@ -245,20 +243,20 @@ class GcamModuleBase(object):
 
         self.params[key] = value
 
-    def runmod(self):
-        """Subclasses of GcamModuleBase are required to override this method."""
+    def run_component(self):
+        """Subclasses of GcamComponentBase are required to override this method."""
 
-        raise NotImplementedError("GcamModuleBase is not a runnable class.")
+        raise NotImplementedError("GcamComponentBase is not a runnable class.")
 
 
 # class to hold the general parameters.
-class GlobalParamsModule(GcamModuleBase):
+class GlobalParamsComponent(GcamComponentBase):
     """Class to hold the general parameters for the calculation.
 
-    Technically this isn't a module as such; it doesn't run anything,
-    but treating it as a module allows us to parse it using the same
-    code we use for all the real modules, and having it in the
-    capability table makes it easy for any module that needs one of
+    Technically this isn't a component as such; it doesn't run anything,
+    but treating it as a component allows us to parse it using the same
+    code we use for all the real components, and having it in the
+    capability table makes it easy for any component that needs one of
     the global parameters to look them up.
 
     Parameters:
@@ -289,10 +287,10 @@ class GlobalParamsModule(GcamModuleBase):
         """Copy parameters into results dictionary.
 
         This function also sets the genparams attribute of the util
-        module, since it can't get them from this class directly.
+        component, since it can't get them from this class directly.
 
         """
-        super(GlobalParamsModule, self).__init__(cap_tbl)
+        super(GlobalParamsComponent, self).__init__(cap_tbl)
 
         self.results = self.params  # this is a reference copy, so any entries added to
         # params will also appear in results.
@@ -302,10 +300,10 @@ class GlobalParamsModule(GcamModuleBase):
         cap_tbl["general"] = self
 
         # We need to allow gcamutil access to these parameters, since it doesn't otherwise know how to find the
-        # global params module.
+        # global params component.
         util.global_params = self
 
-    def runmod(self):
+    def run_component(self):
         """Set the default value for the optional parameters, and convert filenames to absolute paths."""
         self.results['ModelInterface'] = util.abspath(self.results['ModelInterface'])
         self.results['DBXMLlib'] = util.abspath(self.results['DBXMLlib'])
@@ -319,17 +317,17 @@ class GlobalParamsModule(GcamModuleBase):
         if 'rgnconfig' in self.results:
             rgnconfig = self.results['rgnconfig']
         else:
-            stdout.write('[GlobalParamsModule]: Using default region mapping (14 region)')
+            stdout.write('[GlobalParamsComponent]: Using default region mapping (14 region)')
             rgnconfig = 'rgn14'
         self.results['rgnconfig'] = util.abspath(rgnconfig, self.results['inputdir'])
 
         return 0                # nothing to do here.
 
 
-class GcamModule(GcamModuleBase):
+class GcamComponent(GcamComponentBase):
     """Provide the 'gcam-core' capability.
 
-    This module runs the GCAM core model, making the location of the
+    This component runs the GCAM core model, making the location of the
     output database available under the 'gcam-core' capability.
 
     Parameters:
@@ -341,16 +339,16 @@ class GcamModule(GcamModuleBase):
     Results:
       dbxml      = gcam dbxml output file.  We get this from the gcam config.xml file.
 
-    Module dependences: none
+    Component dependences: none
 
     """
 
     def __init__(self, cap_tbl):
         """Add self to the capability table."""
-        super(GcamModule, self).__init__(cap_tbl)
+        super(GcamComponent, self).__init__(cap_tbl)
         cap_tbl["gcam-core"] = self
 
-    def runmod(self):
+    def run_component(self):
         """Run the GCAM core model.
 
         We start by checking to see that all the input files needed
@@ -379,7 +377,7 @@ class GcamModule(GcamModuleBase):
         # the config file as controlling.
         self.workdir = os.path.dirname(exe)
 
-        msgpfx = "GcamModule: "    # prefix for messages coming out of this module
+        msgpfx = "GcamComponent: "    # prefix for messages coming out of this component
         # Do some basic checks:  do these files exist, etc.
         if not os.path.exists(exe):
             raise IOError(msgpfx + "File " + exe + " does not exist!")
@@ -390,7 +388,7 @@ class GcamModule(GcamModuleBase):
 
         # we also need to get the location of the dbxml output file.
         # It's in the gcam.config file (we don't repeat it in the
-        # config for this module because then we would have no way to
+        # config for this component because then we would have no way to
         # ensure consistency).
         dbxmlfpat = re.compile(r'<Value name="xmldb-location">(.*)</Value>')
         dbenabledpat = re.compile(r'<Value name="write-xml-db">(.*)</Value>')
@@ -415,7 +413,7 @@ class GcamModule(GcamModuleBase):
                 if not self.clobber:
                     # This is not an error; it just means we can leave
                     # the existing output in place and return it.
-                    print "GcamModule:  results exist and no clobber.  Skipping."
+                    print "GcamComponent:  results exist and no clobber.  Skipping."
                     self.results["changed"] = 0  # mark the cached results as clean
                     return 0
                 else:
@@ -447,11 +445,11 @@ class GcamModule(GcamModuleBase):
 # matlab -nodisplay -nosplash -nodesktop -r "run_future_hydro('<gcm>','<scenario>');exit" > & outputs/pcm-a1-out.txt < /dev/null
 
 
-class HydroModule(GcamModuleBase):
+class HydroComponent(GcamComponentBase):
     """Provide the 'gcam-hydro' capability.
 
     This is the future hydrology calculation.  For the historical
-    hydrology calculation, see HistoricalHydroModule.
+    hydrology calculation, see HistoricalHydroComponent.
 
      params:
        workdir - working directory
@@ -463,7 +461,7 @@ class HydroModule(GcamModuleBase):
        logfile - file to direct the matlab code's output to
      startmonth- month of year for first month in dataset. 1=Jan, 2=Feb, etc.  (OPTIONAL)
     init-storage-file - Location of the file containing initial channel storage. Not
-                        required (and ignored) if HistoricalHydroModule is present
+                        required (and ignored) if HistoricalHydroComponent is present
 
      results:
        qoutfile - runoff grid (matlab format)
@@ -478,19 +476,19 @@ class HydroModule(GcamModuleBase):
         rgnqtbl - region level runoff (csv format)
      petoutfile - PET grid (matlab format)
 
-    Module dependences: HistoricalHydroModule (optional)
+    Component dependences: HistoricalHydroComponent (optional)
 
     """
 
     def __init__(self, cap_tbl):
         """Add self to the capability table."""
-        super(HydroModule, self).__init__(cap_tbl)
+        super(HydroComponent, self).__init__(cap_tbl)
         cap_tbl["gcam-hydro"] = self
 
-    def runmod(self):
-        """Run the future hydrology module.
+    def run_component(self):
+        """Run the future hydrology component.
 
-        This module identifies the correct input files using the gcm,
+        This component identifies the correct input files using the gcm,
         scenario, and runid tags and checks to see if those files are
         present.  If not, then it throws an IOError exception.  If the
         inputs are present, then it calculates the expected outputs
@@ -520,13 +518,13 @@ class HydroModule(GcamModuleBase):
             startmonth = int(self.params['startmonth'])
         except KeyError:
             startmonth = 1      # Default is to start at the beginning of the year
-        print '[HydroModule]: start month = %d' % startmonth
+        print '[HydroComponent]: start month = %d' % startmonth
 
         # ensure that output directory exists
         util.mkdir_if_noexist(outputdir)
 
         # get initial channel storage from historical hydrology
-        # module if available, or from self-parameters if not
+        # component if available, or from self-parameters if not
         if 'historical-hydro' in self.cap_tbl:
             hist_rslts = self.cap_tbl['historical-hydro'].fetch()
             initstorage = hist_rslts['chstorfile']
@@ -534,7 +532,7 @@ class HydroModule(GcamModuleBase):
             self.results['hist-qout'] = hist_rslts['qoutfile']
         else:
             # matlab data file containing initial storage -- used
-            # only if no historical hydro module.
+            # only if no historical hydro component.
             initstorage = util.abspath(self.params["init-storage-file"])
             self.results['hist-fout'] = '/dev/null'
             self.results['hist-qout'] = '/dev/null'
@@ -551,7 +549,7 @@ class HydroModule(GcamModuleBase):
 
         print "input files:\n\t%s\n\t%s\n\t%s" % (prefile, tempfile, dtrfile)
 
-        msgpfx = "HydroModule:  "
+        msgpfx = "HydroComponent:  "
         if not os.path.exists(prefile):
             raise IOError(msgpfx + "missing input file: " + prefile)
         if not os.path.exists(tempfile):
@@ -596,7 +594,7 @@ class HydroModule(GcamModuleBase):
         self.results['rgnqtbl'] = rgnqtblfile
         self.results['petoutfile'] = petoutfile
 
-        # We need to report the runid so that other modules that use
+        # We need to report the runid so that other components that use
         # this output can name their files correctly.
         self.results['runid'] = runid
 
@@ -604,7 +602,7 @@ class HydroModule(GcamModuleBase):
                        rgnqfile, crgnqfile, basinqtblfile, rgnqtblfile, petoutfile]
         if not self.clobber and util.allexist(alloutfiles):
             # all files exist, and we don't want to clobber them
-            print "[HydroModule]:  results exist and no clobber.  Skipping."
+            print "[HydroComponent]:  results exist and no clobber.  Skipping."
             self.results["changed"] = 0  # mark cached results as clean
             return 0        # success code
 
@@ -636,15 +634,15 @@ class HydroModule(GcamModuleBase):
         if util.allexist(alloutfiles):
             return rc
         else:
-            stderr.write('[HydroModule]: Some output files missing.  Check logfile (%s) for more information\n' % logfile)
+            stderr.write('[HydroComponent]: Some output files missing.  Check logfile (%s) for more information\n' % logfile)
             return 1            # nonzero return code indicates failure
-    # end of runmod()
+    # end of run_component()
 
 
-class HistoricalHydroModule(GcamModuleBase):
+class HistoricalHydroComponent(GcamComponentBase):
     """Class for historical hydrology run.
 
-    This is similar to, but not quite the same as, the main hydro module.
+    This is similar to, but not quite the same as, the main hydro component.
     params:
        workdir  - working directory for the matlab runs
        inputdir - location of the input files
@@ -662,19 +660,19 @@ class HistoricalHydroModule(GcamModuleBase):
           rgnqtbl - file for region level runoff (csv format)
        petoutfile - file for PET output (matlab format)
 
-    module dependences:  none
+    component dependences:  none
 
     """
 
     def __init__(self, cap_tbl):
         """Add 'historical-hydro' capability to cap_tbl"""
-        super(HistoricalHydroModule, self).__init__(cap_tbl)
+        super(HistoricalHydroComponent, self).__init__(cap_tbl)
         cap_tbl['historical-hydro'] = self
 
-    def runmod(self):
+    def run_component(self):
         """Run the historical hydrology code.
 
-        Before running, the module tests for the existence of the
+        Before running, the component tests for the existence of the
         input files, and throws an exception (IOError) if any are
         missing.  It also tests for the expected output files, and if
         they are all present and 'clobber' is not set, it skips the
@@ -694,7 +692,7 @@ class HistoricalHydroModule(GcamModuleBase):
             startmonth = int(self.params['startmonth'])
         except KeyError:
             startmonth = 1      # Default is January
-        print '[HistoricalHydroModule]: start month = %d' % startmonth
+        print '[HistoricalHydroComponent]: start month = %d' % startmonth
 
         # ensure output directory exists
         util.mkdir_if_noexist(outputdir)
@@ -711,7 +709,7 @@ class HistoricalHydroModule(GcamModuleBase):
 
         print "input files:\n\t%s\n\t%s\n\t%s" % (prefile, tempfile, dtrfile)
 
-        msgpfx = "HistoricalHydroModule:  "
+        msgpfx = "HistoricalHydroComponent:  "
         if not os.path.exists(prefile):
             raise IOError(msgpfx + "missing input file: " + prefile)
         if not os.path.exists(tempfile):
@@ -739,19 +737,19 @@ class HistoricalHydroModule(GcamModuleBase):
         # Test to see if the outputs already exist.  If so, then we can skip these calcs.
         alloutfiles = [qoutfile, foutfile, petoutfile, chstorfile, basinqtblfile, rgnqtblfile]
         if not self.clobber and util.allexist(alloutfiles):
-            print "[HistoricalHydroModule]: results exist and no clobber set.  Skipping."
+            print "[HistoricalHydroComponent]: results exist and no clobber set.  Skipping."
             self.results['changed'] = 0
             return 0        # success code
 
         # Get the location of the region mapping file.
         genparams = self.cap_tbl['general'].fetch()
-        gridrgn = util.abspath('grid2rgn_nonag.csv', genparams['rgnconfig'], 'HistoricalHydroModule')
-        print '[HistoricalHydroModule]: gridrgn = %s ' % gridrgn
-        print '[HistoricalHydroModule]: rgnconfig = %s ' % genparams['rgnconfig']
+        gridrgn = util.abspath('grid2rgn_nonag.csv', genparams['rgnconfig'], 'HistoricalHydroComponent')
+        print '[HistoricalHydroComponent]: gridrgn = %s ' % gridrgn
+        print '[HistoricalHydroComponent]: rgnconfig = %s ' % genparams['rgnconfig']
 
         # If we get here, then we need to run the historical
         # hydrology.  Same comments apply as to the regular hydrology
-        # module.
+        # component.
         print 'Running historical hydrology for gcm= %s   runid= %s' % (gcm, runid)
         with open(logfile, 'w') as logdata, open('/dev/null', 'r') as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread', '-r',
@@ -765,27 +763,27 @@ class HistoricalHydroModule(GcamModuleBase):
             return rc
         else:
             stderr.write(
-                '[HistoricalHydroModule]: Some output files were not created.  Check logfile (%s) for details.\n' % logfile)
+                '[HistoricalHydroComponent]: Some output files were not created.  Check logfile (%s) for details.\n' % logfile)
             return 1            # nonzero indicates failure
 
 # This is how you run the disaggregation code
 # matlab -nodisplay -nosplash -nodesktop -r "run_disaggregation('<runoff-file>', '<chflow-file>', '<gcam-filestem>');exit" >& <logfile> < /dev/null
 
 
-class WaterDisaggregationModule(GcamModuleBase):
+class WaterDisaggregationComponent(GcamComponentBase):
     """Class for the water demand disaggregation calculation
 
-    This module makes use of the GCAMhydro code (which currently
+    This component makes use of the GCAMhydro code (which currently
     includes the water disaggregation code). That code lives in its
     own repository and must be installed independently.  Some input
-    files for this module will live in the GCAMhydro input directory,
+    files for this component will live in the GCAMhydro input directory,
     while others will live in the gcam-driver inputs.  Mostly, things
     that GCAMhydro knows about go in the GCAMhydro directories, while
     other stuff goes in our directories.  One major exception is all
     of the region-related data (including the grid-to-region mapping.
     That data is in the driver repository (by default - it can be
     changed) so that we can keep the region mapping consistent between
-    modules.
+    components.
 
     params:
        workdir  - working directory (location of GCAMhydro code)
@@ -799,7 +797,7 @@ class WaterDisaggregationModule(GcamModuleBase):
       scenario  - scenario tag
 
           inputdir - directory for static inputs.  (OPTIONAL - default =
-                     inputdir from GlobalParamsModule)
+                     inputdir from GlobalParamsComponent)
 
     water-transfer - Flag indicating whether water transfer projects
                      should be added in post processing (OPTIONAL -
@@ -816,19 +814,19 @@ class WaterDisaggregationModule(GcamModuleBase):
               filename): "wdtotal", "wddom", "wdelec", "wdirr",
               "wdliv", "wdmanuf", "wdmining", "wsi"
 
-    Module dependences:  GcamModule, HydroModule
+    Component dependences:  GcamComponent, HydroComponent
 
     TODO: Allow config to specify a GCAM dbxml file directly, instead
-          of having to go through the GcamModule, even when we know
+          of having to go through the GcamComponent, even when we know
           the result is precalculated.
 
     """
 
     def __init__(self, cap_tbl):
-        super(WaterDisaggregationModule, self).__init__(cap_tbl)
+        super(WaterDisaggregationComponent, self).__init__(cap_tbl)
         cap_tbl["water-disaggregation"] = self
 
-    def runmod(self):
+    def run_component(self):
         """Run the water demand disaggregation calculation.
 
         Does some simple consistency checking on the input parameters,
@@ -845,17 +843,17 @@ class WaterDisaggregationModule(GcamModuleBase):
 
         workdir = self.params["workdir"]
 
-        hydro_rslts = self.cap_tbl["gcam-hydro"].fetch()  # hydrology module
+        hydro_rslts = self.cap_tbl["gcam-hydro"].fetch()  # hydrology component
         genparams = self.cap_tbl['general'].fetch()   # general parameters
 
         if 'dbxml' in self.params:
             if 'gcam-core' in self.cap_tbl:
                 stdout.write(
-                    '[WaterDisaggregationModule]: WARNING - gcam module included and dbfile specified.  Using dbfile and ignoring module.\n')
+                    '[WaterDisaggregationComponent]: WARNING - gcam component included and dbfile specified.  Using dbfile and ignoring component.\n')
             gcam_rslts = {'dbxml': self.params['dbxml'],
                           'changed': False}
         else:
-            gcam_rslts = self.cap_tbl["gcam-core"].fetch()  # gcam core module
+            gcam_rslts = self.cap_tbl["gcam-core"].fetch()  # gcam core component
 
         runoff_file = hydro_rslts["qoutfile"]
         chflow_file = hydro_rslts["foutfile"]
@@ -879,7 +877,7 @@ class WaterDisaggregationModule(GcamModuleBase):
             inputdir = self.params['inputdir']  # static inputs, such as irrigation share and query files.
         else:
             inputdir = genparams['inputdir']
-        print '[WaterDisaggregationModule]: inputdir = %s' % inputdir
+        print '[WaterDisaggregationComponent]: inputdir = %s' % inputdir
 
         # Parse the water transfer parameters.
         if 'water-transfer' in self.params:
@@ -913,7 +911,7 @@ class WaterDisaggregationModule(GcamModuleBase):
             scenariotag = scenariotag + 'wF'
         print 'scenariotag = %s' % scenariotag
 
-        # Initialize the waterdisag module
+        # Initialize the waterdisag component
         waterdisag.init_rgn_tables(rgnconfig)
 
         # Helper function generator
@@ -936,14 +934,14 @@ class WaterDisaggregationModule(GcamModuleBase):
             filename = "%s/%s-%s-%s.dat" % (outputdir, var, scenariotag, runid)
             self.results[var] = filename
             if not os.path.exists(filename):
-                print 'File %s does not exist.  Running WaterDisaggregationModule.\n' % filename
+                print 'File %s does not exist.  Running WaterDisaggregationComponent.\n' % filename
                 allfiles = 0
 
         pop_demo_file = outdirprep("pop-demo.csv")  # changed this to use the same region ordering in the water data.
         self.results['pop-demo'] = pop_demo_file
 
         if allfiles and not self.clobber and not (gcam_rslts["changed"] or hydro_rslts["changed"]):
-            print "WaterDisaggregationModule: results exist and no clobber.  Skipping."
+            print "WaterDisaggregationComponent: results exist and no clobber.  Skipping."
             self.results["changed"] = 0
             return 0
 
@@ -1018,13 +1016,13 @@ class WaterDisaggregationModule(GcamModuleBase):
                                   cwd=workdir)
             return sp.wait()
 
-    # end of runmod
+    # end of run_component
 
 # class for the netcdf-demo builder
 
 
-class NetcdfDemoModule(GcamModuleBase):
-    """Module to build NetCDF output for the February 2015 demo.
+class NetcdfDemoComponent(GcamComponentBase):
+    """Component to build NetCDF output for the February 2015 demo.
 
     params:
       mat2nc  - location of the netcdf converter executable
@@ -1034,16 +1032,16 @@ class NetcdfDemoModule(GcamModuleBase):
        pcGDP  - 2050 per-capita GDP (written into output data as metadata -- currently not used anyhow)
     outfile - output file
 
-    Module dependences:  HydroModule, WaterDisaggregationModule
+    Component dependences:  HydroComponent, WaterDisaggregationComponent
 
     """
 
     def __init__(self, cap_tbl):
-        super(NetcdfDemoModule, self).__init__(cap_tbl)
+        super(NetcdfDemoComponent, self).__init__(cap_tbl)
         cap_tbl['netcdf-demo'] = self
 
-    def runmod(self):
-        """Create NetCDF file from HydroModule and WaterDisaggregationModule results."""
+    def run_component(self):
+        """Create NetCDF file from HydroComponent and WaterDisaggregationComponent results."""
         hydro_rslts = self.cap_tbl['gcam-hydro'].fetch()
         water_rslts = self.cap_tbl['water-disaggregation'].fetch()
 

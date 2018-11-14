@@ -19,15 +19,15 @@ except IndexError:
 sys.path.append('../..')
 
 from gcam import *
-from gcam.modules import GlobalParamsModule
+from gcam.components import GlobalParamsComponent
 from gcam.water import waterdisag
 
-# Set up the global parameters module (which is used by some of the
+# Set up the global parameters component (which is used by some of the
 # utility functions).
 # XXX these paths are specific to the configuration on PIC.
 genparams = {"ModelInterface": "/pic/projects/GCAM/ModelInterface-baseX/ModelInterface.jar",
              "DBXMLlib": "/pic/projects/GCAM/GCAM-libraries/lib"}
-global_params = GlobalParamsModule({})
+global_params = GlobalParamsComponent({})
 for key in genparams.keys():
     global_params.addparam(key, genparams[key])
 global_params.run()
