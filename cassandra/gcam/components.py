@@ -41,7 +41,7 @@ import threading
 import tempfile
 from sys import stdout
 from sys import stderr
-from gcam import util
+import util
 
 
 class GcamComponentBase(object):
@@ -839,7 +839,7 @@ class WaterDisaggregationComponent(GcamComponentBase):
 
         """
 
-        import gcam.water.waterdisag as waterdisag
+        import water.waterdisag as waterdisag
 
         workdir = self.params["workdir"]
 

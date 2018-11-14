@@ -18,9 +18,9 @@ except IndexError:
 # enable this code to run from the gcam/test/ directory
 sys.path.append('../..')
 
-from gcam import *
-from gcam.components import GlobalParamsComponent
-from gcam.water import waterdisag
+import util
+from components import GlobalParamsComponent
+from water import waterdisag
 
 # Set up the global parameters component (which is used by some of the
 # utility functions).
@@ -31,7 +31,7 @@ global_params = GlobalParamsComponent({})
 for key in genparams.keys():
     global_params.addparam(key, genparams[key])
 global_params.run()
-water.waterdisag.init_rgn_tables('../../../input-data/rgn32')
+waterdisag.init_rgn_tables('../../../input-data/rgn32')
 
 queryfiles = ['batch-land-alloc.xml', 'batch-water-ag.xml']
 
@@ -45,7 +45,7 @@ outfiles = ['output/batch-land-alloc.csv', 'output/batch-water-ag.csv']
 util.gcam_query(queryfiles, dbfile, querydir, outfiles)
 
 ag_area_file = outfiles[0]
-ag_area = water.waterdisag.read_gcam_ag_area(ag_area_file)
+ag_area = waterdisag.read_gcam_ag_area(ag_area_file)
 
 # compute area fraction
 irr_shr = {}
@@ -60,10 +60,10 @@ for (rgn, aez, crop, irr) in ag_area:
         irr_shr[(rgn, aez, crop)] = map(lambda x, y: x/(x+y+1e-12), irrigated, rainfed)
 
 with open('output/irrigation-frac.csv', 'w') as outfile:
-    for (rgnidx, rgn) in enumerate(water.waterdisag.regions_ordered):
+    for (rgnidx, rgn) in enumerate(waterdisag.regions_ordered):
         rgnno = rgnidx + 1      # output needs unit-indexed addressing
         for aez in range(1, 19):
-            for (cropidx, crop) in enumerate(water.waterdisag.croplist):
+            for (cropidx, crop) in enumerate(waterdisag.croplist):
                 cropno = cropidx + 1  # unit indexing
                 try:
                     data = irr_shr[(rgnno, aez, cropno)]

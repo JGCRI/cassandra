@@ -6,8 +6,8 @@ import sys
 # enable this code to run from the gcam/test/ directory
 sys.path.append('../..')
 
-import gcam.water
-from gcam.water import pplnt
+import water
+from water import pplnt
 import json
 import unittest
 
