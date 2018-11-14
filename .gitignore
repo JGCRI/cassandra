@@ -31,6 +31,7 @@ mat2nc
 # TeX intermediate files
 doc/*.aux
 doc/*.log
+doc/*.gz
 
 # Emacs backup files
 *~
@@ -41,6 +42,9 @@ doc/*.log
 
 # LibreOffice lock files
 .~lock*
+
+# PyCharm files
+.idea/
 
 # Output 
 *.nc
@@ -56,3 +60,8 @@ batchfiles/
 
 # original query file
 Main_queries_water.xml
+
+# ignore build
+build
+dist
+cassandra.egg-info
