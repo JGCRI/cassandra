@@ -42,7 +42,7 @@ import threading
 import tempfile
 from sys import stdout
 from sys import stderr
-from gcam import util
+import util
 
 
 class ComponentBase(object):
@@ -178,9 +178,9 @@ class ComponentBase(object):
                 rv = self.run_component()
                 if not rv == 0:
                     # possibly add some other error handling here.
-                    raise RuntimeError("%s:  run_component returned error code %s" % (self.__class__, str(rv)))
+                    raise RuntimeError(f"{self.__class__}:  run_component returned error code {str(rv)}")
                 else:
-                    stdout.write("%s: finished successfully.\n" % (self.__class__))
+                    stdout.write(f"{self.__class__}: finished successfully.\n")
 
                 self.status = 1                  # set success condition
             except:
@@ -207,14 +207,14 @@ class ComponentBase(object):
         # statement tries to obtain the lock.
         with self.condition:
             if self.status == 0:                  # component hasn't run yet.  Wait on it
-                print "\twaiting on %s\n" % self.__class__
+                print(f"\twaiting on {self.__class__}\n")
                 self.condition.wait()
         # end of with block:  lock is released
 
         # By this point, the component should have run.  If status is not success, then
         # there has been an error.
         if self.status != 1:
-            raise RuntimeError("%s: wait() returned with non-success status!" % self.__class__)
+            raise RuntimeError(f"{self.__class__}: wait() returned with non-success status!")
 
         return self.results
 
@@ -296,8 +296,8 @@ class GlobalParamsComponent(ComponentBase):
         self.results = self.params  # this is a reference copy, so any entries added to
         # params will also appear in results.
 
-        print 'General parameters as input:'
-        print self.results
+        print('General parameters as input:')
+        print(self.results)
         cap_tbl["general"] = self
 
         # We need to allow gcamutil access to these parameters, since it doesn't otherwise know how to find the
@@ -370,7 +370,7 @@ class GcamComponent(ComponentBase):
         try:
             logfile = self.params['logfile']  # file for redirecting gcam's copious stdout
         except KeyError:
-            ## logfile is optional
+            # logfile is optional
             logfile = None
 
         # usually the exe, cfg, and logcfg files will be in the same
@@ -405,7 +405,7 @@ class GcamComponent(ComponentBase):
                     dbxmlfile = match.group(1)
                     break
 
-            print "%s:  dbxmlfile = %s" % (self.__class__, dbxmlfile)
+            print(f"{self.__class__}:  dbxmlfile = {dbxmlfile}")
             # The file spec is a relative path, starting from the
             # directory that contains the config file.
             dbxmlfile = os.path.join(self.workdir, dbxmlfile)
@@ -414,7 +414,7 @@ class GcamComponent(ComponentBase):
                 if not self.clobber:
                     # This is not an error; it just means we can leave
                     # the existing output in place and return it.
-                    print "GcamComponent:  results exist and no clobber.  Skipping."
+                    print("GcamComponent:  results exist and no clobber.  Skipping.")
                     self.results["changed"] = 0  # mark the cached results as clean
                     return 0
                 else:
@@ -432,7 +432,7 @@ class GcamComponent(ComponentBase):
                         break
 
         # now we're ready to actually do the run.  We don't check the return code; we let the run() method do that.
-        print "Running:  %s -C%s -L%s" % (exe, cfg, logcfg)
+        print(f"Running:  {exe} -C{cfg} -L{logcfg}")
 
         if logfile is None:
             return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], cwd=self.workdir)
@@ -519,7 +519,7 @@ class HydroComponent(ComponentBase):
             startmonth = int(self.params['startmonth'])
         except KeyError:
             startmonth = 1      # Default is to start at the beginning of the year
-        print '[HydroComponent]: start month = %d' % startmonth
+        print(f'[HydroComponent]: start month = {startmonth}')
 
         # ensure that output directory exists
         util.mkdir_if_noexist(outputdir)
@@ -548,7 +548,7 @@ class HydroComponent(ComponentBase):
         tempfile = inputdir + 'tas_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
         dtrfile = inputdir + 'dtr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
 
-        print "input files:\n\t%s\n\t%s\n\t%s" % (prefile, tempfile, dtrfile)
+        print(f"input files:\n\t{prefile}\n\t{tempfile}\n\t{dtrfile}")
 
         msgpfx = "HydroComponent:  "
         if not os.path.exists(prefile):
@@ -603,7 +603,7 @@ class HydroComponent(ComponentBase):
                        rgnqfile, crgnqfile, basinqtblfile, rgnqtblfile, petoutfile]
         if not self.clobber and util.allexist(alloutfiles):
             # all files exist, and we don't want to clobber them
-            print "[HydroComponent]:  results exist and no clobber.  Skipping."
+            print("[HydroComponent]:  results exist and no clobber.  Skipping.")
             self.results["changed"] = 0  # mark cached results as clean
             return 0        # success code
 
@@ -623,11 +623,10 @@ class HydroComponent(ComponentBase):
         # parameters.
         # TODO: prune the number of filenames passed by inferring all
         # of the cfoofile filenames the same way.
-        print 'Running the matlab hydrology code'
+        print('Running the matlab hydrology code')
         with open(logfile, "w") as logdata, open("/dev/null", "r") as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread', '-r',
-                       "run_future_hydro('%s','%s','%s','%s','%s', %d, '%s','%s','%s', '%s','%s', '/dev/null');exit" %
-                       (prefile, tempfile, dtrfile, initstorage, gridrgn, startmonth, qoutfile, foutfile, petoutfile, basinqfile, rgnqfile)]
+                       f"run_future_hydro('{prefile}', '{tempfile}', '{dtrfile}', '{initstorage}', '{gridrgn}', '{startmonth}', '{qoutfile}', '{foutfile}', '{petoutfile}', '{basinqfile}', '{rgnqfile}', '/dev/null');exit"]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
                                   cwd=workdir)
             rc = sp.wait()
@@ -635,7 +634,7 @@ class HydroComponent(ComponentBase):
         if util.allexist(alloutfiles):
             return rc
         else:
-            stderr.write('[HydroComponent]: Some output files missing.  Check logfile (%s) for more information\n' % logfile)
+            stderr.write(f'[HydroComponent]: Some output files missing.  Check logfile ({logfile}) for more information\n')
             return 1            # nonzero return code indicates failure
     # end of run_component()
 
@@ -693,7 +692,7 @@ class HistoricalHydroComponent(ComponentBase):
             startmonth = int(self.params['startmonth'])
         except KeyError:
             startmonth = 1      # Default is January
-        print '[HistoricalHydroComponent]: start month = %d' % startmonth
+        print(f'[HistoricalHydroComponent]: start month = {startmonth}')
 
         # ensure output directory exists
         util.mkdir_if_noexist(outputdir)
@@ -708,7 +707,7 @@ class HistoricalHydroComponent(ComponentBase):
         tempfile = inputdir + 'tas_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
         dtrfile = inputdir + 'dtr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
 
-        print "input files:\n\t%s\n\t%s\n\t%s" % (prefile, tempfile, dtrfile)
+        print(f"input files:\n\t{prefile}\n\t{tempfile}\n\t{dtrfile}")
 
         msgpfx = "HistoricalHydroComponent:  "
         if not os.path.exists(prefile):
@@ -738,24 +737,23 @@ class HistoricalHydroComponent(ComponentBase):
         # Test to see if the outputs already exist.  If so, then we can skip these calcs.
         alloutfiles = [qoutfile, foutfile, petoutfile, chstorfile, basinqtblfile, rgnqtblfile]
         if not self.clobber and util.allexist(alloutfiles):
-            print "[HistoricalHydroComponent]: results exist and no clobber set.  Skipping."
+            print("[HistoricalHydroComponent]: results exist and no clobber set.  Skipping.")
             self.results['changed'] = 0
             return 0        # success code
 
         # Get the location of the region mapping file.
         genparams = self.cap_tbl['general'].fetch()
         gridrgn = util.abspath('grid2rgn_nonag.csv', genparams['rgnconfig'], 'HistoricalHydroComponent')
-        print '[HistoricalHydroComponent]: gridrgn = %s ' % gridrgn
-        print '[HistoricalHydroComponent]: rgnconfig = %s ' % genparams['rgnconfig']
+        print(f'[HistoricalHydroComponent]: gridrgn = {gridrgn} ')
+        print(f'[HistoricalHydroComponent]: rgnconfig = {genparams["rgnconfig"]} ')
 
         # If we get here, then we need to run the historical
         # hydrology.  Same comments apply as to the regular hydrology
         # component.
-        print 'Running historical hydrology for gcm= %s   runid= %s' % (gcm, runid)
+        print(f'Running historical hydrology for gcm= {gcm}   runid= {runid}')
         with open(logfile, 'w') as logdata, open('/dev/null', 'r') as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread', '-r',
-                       "run_historical_hydro('%s', '%s', '%s', '%s', %d, '%s', '%s','%s', '%s', '%s', '%s', '/dev/null');exit" %
-                       (prefile, tempfile, dtrfile, gridrgn, 1, chstorfile, qoutfile, foutfile, petoutfile, basinqtblfile, rgnqtblfile)]
+                       f"run_future_hydro('{prefile}', '{tempfile}', '{dtrfile}', '{gridrgn}', '{1}', '{chstorfile}', '{qoutfile}', '{foutfile}', '{petoutfile}', '{basinqfile}', '{rgnqtblfile}', '/dev/null');exit"]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
                                   cwd=workdir)
             rc = sp.wait()
@@ -764,7 +762,7 @@ class HistoricalHydroComponent(ComponentBase):
             return rc
         else:
             stderr.write(
-                '[HistoricalHydroComponent]: Some output files were not created.  Check logfile (%s) for details.\n' % logfile)
+                f'[HistoricalHydroComponent]: Some output files were not created.  Check logfile ({logfile}) for details.\n')
             return 1            # nonzero indicates failure
 
 # This is how you run the disaggregation code
@@ -825,7 +823,7 @@ class WaterDisaggregationComponent(ComponentBase):
 
     def __init__(self, cap_tbl):
         super(WaterDisaggregationComponent, self).__init__(cap_tbl)
-        cap_tbl["water-disaggregation"] = self
+        cap_tbl["water-disaggregation"]=self
 
     def run_component(self):
         """Run the water demand disaggregation calculation.
@@ -840,77 +838,77 @@ class WaterDisaggregationComponent(ComponentBase):
 
         """
 
-        import gcam.water.waterdisag as waterdisag
+        import water.waterdisag as waterdisag
 
-        workdir = self.params["workdir"]
+        workdir=self.params["workdir"]
 
-        hydro_rslts = self.cap_tbl["gcam-hydro"].fetch()  # hydrology component
-        genparams = self.cap_tbl['general'].fetch()   # general parameters
+        hydro_rslts=self.cap_tbl["gcam-hydro"].fetch()  # hydrology component
+        genparams=self.cap_tbl['general'].fetch()   # general parameters
 
         if 'dbxml' in self.params:
             if 'gcam-core' in self.cap_tbl:
                 stdout.write(
                     '[WaterDisaggregationComponent]: WARNING - gcam component included and dbfile specified.  Using dbfile and ignoring component.\n')
-            gcam_rslts = {'dbxml': self.params['dbxml'],
+            gcam_rslts={'dbxml': self.params['dbxml'],
                           'changed': False}
         else:
-            gcam_rslts = self.cap_tbl["gcam-core"].fetch()  # gcam core component
+            gcam_rslts=self.cap_tbl["gcam-core"].fetch()  # gcam core component
 
-        runoff_file = hydro_rslts["qoutfile"]
-        chflow_file = hydro_rslts["foutfile"]
-        basinqfile = hydro_rslts["basinqfile"]
-        rgnqfile = hydro_rslts["rgnqfile"]
-        runid = hydro_rslts["runid"]
-        dbxmlfile = util.abspath(gcam_rslts["dbxml"])
-        outputdir = util.abspath(self.params["outputdir"])
-        tempdir = util.abspath(self.params["tempdir"])  # location for intermediate files produced by dbxml queries
-        scenariotag = self.params["scenario"]
-        hist_chflow_file = hydro_rslts['hist-fout']
-        hist_runoff_file = hydro_rslts['hist-qout']
+        runoff_file=hydro_rslts["qoutfile"]
+        chflow_file=hydro_rslts["foutfile"]
+        basinqfile=hydro_rslts["basinqfile"]
+        rgnqfile=hydro_rslts["rgnqfile"]
+        runid=hydro_rslts["runid"]
+        dbxmlfile=util.abspath(gcam_rslts["dbxml"])
+        outputdir=util.abspath(self.params["outputdir"])
+        tempdir=util.abspath(self.params["tempdir"])  # location for intermediate files produced by dbxml queries
+        scenariotag=self.params["scenario"]
+        hist_chflow_file=hydro_rslts['hist-fout']
+        hist_runoff_file=hydro_rslts['hist-qout']
 
-        rgnconfig = genparams['rgnconfig']
+        rgnconfig=genparams['rgnconfig']
 
         # ensure that output and temp directories exist
         util.mkdir_if_noexist(outputdir)
         util.mkdir_if_noexist(tempdir)
 
         if 'inputdir' in self.params:
-            inputdir = self.params['inputdir']  # static inputs, such as irrigation share and query files.
+            inputdir=self.params['inputdir']  # static inputs, such as irrigation share and query files.
         else:
-            inputdir = genparams['inputdir']
-        print '[WaterDisaggregationComponent]: inputdir = %s' % inputdir
+            inputdir=genparams['inputdir']
+        print(f'[WaterDisaggregationComponent]: inputdir = {inputdir}')
 
         # Parse the water transfer parameters.
         if 'water-transfer' in self.params:
-            transfer = util.parseTFstring(self.params['water-transfer'])
+            transfer=util.parseTFstring(self.params['water-transfer'])
             try:
-                transfer_file = util.abspath(self.params['transfer-file'], workdir)
+                transfer_file=util.abspath(self.params['transfer-file'], workdir)
             except KeyError:
                 stderr.write('Water transfer set, but no transfer data file specified.\n')
                 return 5
         else:
-            transfer = False
-            transfer_file = '/dev/null'  # won't be used by the matlab program, but we still need a placeholder
+            transfer=False
+            transfer_file='/dev/null'  # won't be used by the matlab program, but we still need a placeholder
 
         if 'power-plant-data' in self.params:
-            ppinfile = self.params['power-plant-data']
-            wfcoal = self.params.get('waterfac-coal')  # get() suplies None as a default value
-            wfgas = self.params.get('waterfac-gas')
-            wfnuc = self.params.get('waterfac-nuc')
+            ppinfile=self.params['power-plant-data']
+            wfcoal=self.params.get('waterfac-coal')  # get() suplies None as a default value
+            wfgas=self.params.get('waterfac-gas')
+            wfnuc=self.params.get('waterfac-nuc')
 
-            ppgrid_data = waterdisag.pplant_proc(ppinfile, tempdir, wfcoal, wfgas, wfnuc)
-            ppflag = 1
+            ppgrid_data=waterdisag.pplant_proc(ppinfile, tempdir, wfcoal, wfgas, wfnuc)
+            ppflag=1
         else:
-            ppgrid_data = '/dev/null'  # matlab prog will detect and use fallback.
-            ppflag = 0
+            ppgrid_data='/dev/null'  # matlab prog will detect and use fallback.
+            ppflag=0
 
-        self.results['water-transfer'] = transfer
+        self.results['water-transfer']=transfer
         # append the transfer status to the scenario tag
         if transfer:
-            scenariotag = scenariotag + 'wT'
+            scenariotag=scenariotag + 'wT'
         else:
-            scenariotag = scenariotag + 'wF'
-        print 'scenariotag = %s' % scenariotag
+            scenariotag=scenariotag + 'wF'
+        print(f'scenariotag = {scenariotag}')
 
         # Initialize the waterdisag component
         waterdisag.init_rgn_tables(rgnconfig)
@@ -922,40 +920,40 @@ class WaterDisaggregationComponent(ComponentBase):
             else:
                 return lambda file: dir+'/'+file
 
-        inputdirprep = get_dir_prepender(inputdir)
-        tempdirprep = get_dir_prepender(tempdir)
-        outdirprep = get_dir_prepender(outputdir)
-        rgndirprep = get_dir_prepender(rgnconfig)
+        inputdirprep=get_dir_prepender(inputdir)
+        tempdirprep=get_dir_prepender(tempdir)
+        outdirprep=get_dir_prepender(outputdir)
+        rgndirprep=get_dir_prepender(rgnconfig)
 
-        vars = ["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi",
+        vars=["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi",
                 "basin-supply", "basin-wdtot", "basin-wddom", "basin-wdelec", "basin-wdirr", "basin-wdliv", "basin-wdmfg", "basin-wdmin", "basin-wsi",
                 "rgn-supply", "rgn-wdtot", "rgn-wddom", "rgn-wdelec", "rgn-wdirr", "rgn-wdliv", "rgn-wdmfg", "rgn-wdmin", "rgn-wsi"]
-        allfiles = 1
+        allfiles=1
         for var in vars:
-            filename = "%s/%s-%s-%s.dat" % (outputdir, var, scenariotag, runid)
-            self.results[var] = filename
+            filename=f"{outputdir}/{var}-{scenariotag}-{runid}.dat"
+            self.results[var]=filename
             if not os.path.exists(filename):
-                print 'File %s does not exist.  Running WaterDisaggregationComponent.\n' % filename
-                allfiles = 0
+                print(f'File {filename} does not exist.  Running WaterDisaggregationComponent.\n')
+                allfiles=0
 
-        pop_demo_file = outdirprep("pop-demo.csv")  # changed this to use the same region ordering in the water data.
-        self.results['pop-demo'] = pop_demo_file
+        pop_demo_file=outdirprep("pop-demo.csv")  # changed this to use the same region ordering in the water data.
+        self.results['pop-demo']=pop_demo_file
 
         if allfiles and not self.clobber and not (gcam_rslts["changed"] or hydro_rslts["changed"]):
-            print "WaterDisaggregationComponent: results exist and no clobber.  Skipping."
-            self.results["changed"] = 0
+            print("WaterDisaggregationComponent: results exist and no clobber.  Skipping.")
+            self.results["changed"]=0
             return 0
 
-        print 'disaggregation results:\n%s' % str(self.results)
+        print(f'disaggregation results:\n{str(self.results)}')
 
-        queryfiles = ['batch-land-alloc.xml', 'batch-population.xml', 'batch-water-ag.xml',
-                      'batch-water-dom.xml', 'batch-water-elec.xml', 'batch-water-livestock.xml',
-                      'batch-water-mfg.xml', 'batch-water-mining-alt.xml']
-        outfiles = ['batch-land-alloc.csv', 'batch-population.csv', 'batch-water-ag.csv',
+        queryfiles=['batch-land-alloc.xml', 'batch-population.xml', 'batch-water-ag.xml',
+                    'batch-water-dom.xml', 'batch-water-elec.xml', 'batch-water-livestock.xml',
+                    'batch-water-mfg.xml', 'batch-water-mining-alt.xml']
+        outfiles=['batch-land-alloc.csv', 'batch-population.csv', 'batch-water-ag.csv',
                     'batch-water-dom.csv', 'batch-water-elec.csv', 'batch-water-livestock.csv',
                     'batch-water-mfg.csv', 'batch-water-mining.csv']
-        queryfiles = map(inputdirprep, queryfiles)
-        outfiles = map(tempdirprep, outfiles)
+        queryfiles=map(inputdirprep, queryfiles)
+        outfiles=map(tempdirprep, outfiles)
         util.gcam_query(queryfiles, dbxmlfile, inputdir, outfiles)
 
         # reformat the GCAM outputs into the files the matlab code needs
@@ -967,20 +965,20 @@ class WaterDisaggregationComponent(ComponentBase):
 
         # non-ag demands (sadly, I didn't think to put the lists
         # above in the order we were planning to use them.)
-        wddom = waterdisag.proc_wdnonag(outfiles[3], tempdirprep("withd_dom.csv"))
-        wdelec = waterdisag.proc_wdnonag(outfiles[4], tempdirprep("withd_elec.csv"))
-        wdman = waterdisag.proc_wdnonag(outfiles[6], tempdirprep("withd_mfg.csv"))
-        wdmin = waterdisag.proc_wdnonag(outfiles[7], tempdirprep("withd_min.csv"))
+        wddom=waterdisag.proc_wdnonag(outfiles[3], tempdirprep("withd_dom.csv"))
+        wdelec=waterdisag.proc_wdnonag(outfiles[4], tempdirprep("withd_elec.csv"))
+        wdman=waterdisag.proc_wdnonag(outfiles[6], tempdirprep("withd_mfg.csv"))
+        wdmin=waterdisag.proc_wdnonag(outfiles[7], tempdirprep("withd_min.csv"))
 
         # population data
         waterdisag.proc_pop(outfiles[1], tempdirprep("pop_fac.csv"), tempdirprep("pop_tot.csv"), pop_demo_file)
 
         # livestock demands
-        wdliv = waterdisag.proc_wdlivestock(outfiles[5], tempdirprep(
+        wdliv=waterdisag.proc_wdlivestock(outfiles[5], tempdirprep(
             "withd_liv.csv"), tempdirprep('rgn_tot_withd_liv.csv'))
 
         # agricultural demands and auxiliary quantities
-        gcam_irr = waterdisag.proc_ag_area(outfiles[0], tempdirprep("irrA.csv"))
+        gcam_irr=waterdisag.proc_ag_area(outfiles[0], tempdirprep("irrA.csv"))
         waterdisag.proc_ag_vol(outfiles[2], tempdirprep("withd_irrV.csv"))
 
         if not gcam_irr:
@@ -988,17 +986,17 @@ class WaterDisaggregationComponent(ComponentBase):
             # rain-fed land allocations, then we need to read in some
             # precalculated irrigation shares.
             waterdisag.proc_irr_share(rgndirprep('irrigation-frac.csv'), tempdirprep("irrS.csv"))
-            read_irrS = 1       # argument to matlab code
+            read_irrS=1       # argument to matlab code
         else:
-            read_irrS = 0
+            read_irrS=0
 
         # Run the disaggregation model
         if transfer:
-            tflag = 1
+            tflag=1
         else:
-            tflag = 0
+            tflag=0
 
-        matlabdata = {'runoff': runoff_file, 'chflow': chflow_file,
+        matlabdata={'runoff': runoff_file, 'chflow': chflow_file,
                       'histrunoff': hist_runoff_file,
                       'histchflow': hist_chflow_file, 'basinqfile': basinqfile,
                       'rgnqfile': rgnqfile, 'rgnconfig': rgnconfig, 'tempdir': tempdir,
@@ -1006,14 +1004,14 @@ class WaterDisaggregationComponent(ComponentBase):
                       'outputdir': outputdir, 'scenario': scenariotag,
                       'runid': runid, 'trnflag': tflag, 'trnfile': transfer_file,
                       'rdirrS': read_irrS}
-        matlabfn = "run_disaggregation('{runoff}', '{chflow}', '{histrunoff}', '{histchflow}', '{basinqfile}', '{rgnqfile}', '{rgnconfig}', '{tempdir}', {ppflg:d}, '{ppgrid}', '{outputdir}', '{scenario}', '{runid}', {trnflag:d}, '{trnfile}', {rdirrS:d}); exit".format(**matlabdata)
-        print 'current dir: %s ' % os.getcwd()
-        print 'matlab fn:  %s' % matlabfn
+        matlabfn="run_disaggregation('{runoff}', '{chflow}', '{histrunoff}', '{histchflow}', '{basinqfile}', '{rgnqfile}', '{rgnconfig}', '{tempdir}', {ppflg:d}, '{ppgrid}', '{outputdir}', '{scenario}', '{runid}', {trnflag:d}, '{trnfile}', {rdirrS:d}); exit".format(**matlabdata)
+        print(f'current dir: {os.getcwd()} ')
+        print(f'matlab fn:  {matlabfn}')
         with open(self.params["logfile"], "w") as logdata, open("/dev/null", "r") as null:
-            arglist = ["matlab", "-nodisplay", "-nosplash", "-nodesktop", '-singleCompThread', "-r",
+            arglist=["matlab", "-nodisplay", "-nosplash", "-nodesktop", '-singleCompThread', "-r",
                        matlabfn]
 
-            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
+            sp=subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
                                   cwd=workdir)
             return sp.wait()
 
@@ -1041,50 +1039,50 @@ class NetcdfDemoComponent(ComponentBase):
 
     def __init__(self, cap_tbl):
         super(NetcdfDemoComponent, self).__init__(cap_tbl)
-        cap_tbl['netcdf-demo'] = self
+        cap_tbl['netcdf-demo']=self
 
     def run_component(self):
         """Create NetCDF file from HydroComponent and WaterDisaggregationComponent results."""
-        hydro_rslts = self.cap_tbl['gcam-hydro'].fetch()
-        water_rslts = self.cap_tbl['water-disaggregation'].fetch()
+        hydro_rslts=self.cap_tbl['gcam-hydro'].fetch()
+        water_rslts=self.cap_tbl['water-disaggregation'].fetch()
 
-        print 'water_rslts:\n%s' % str(water_rslts)
+        print(f'water_rslts:\n{str(water_rslts)}')
 
-        chflow_file = hydro_rslts['cflxfile']
-        transfer = water_rslts['water-transfer']
+        chflow_file=hydro_rslts['cflxfile']
+        transfer=water_rslts['water-transfer']
 
-        rcp = self.params['rcp']
-        pop = self.params['pop']
-        gdp = 10.0              # Dummy value; we didn't implement the GDP scenarios.
-        outfile = util.abspath(self.params['outfile'])
-        mat2nc = util.abspath(self.params['mat2nc'], os.getcwd())
+        rcp=self.params['rcp']
+        pop=self.params['pop']
+        gdp=10.0              # Dummy value; we didn't implement the GDP scenarios.
+        outfile=util.abspath(self.params['outfile'])
+        mat2nc=util.abspath(self.params['mat2nc'], os.getcwd())
 
-        self.results['outfile'] = outfile
+        self.results['outfile']=outfile
 
         # ensure that the directory the output file is being written to exists
         util.mkdir_if_noexist(os.path.dirname(outfile))
 
         try:
             # create a temporary file to hold the config
-            (fd, tempfilename) = tempfile.mkstemp()
-            cfgfile = os.fdopen(fd, "w")
+            (fd, tempfilename)=tempfile.mkstemp()
+            cfgfile=os.fdopen(fd, "w")
 
-            cfgfile.write('%s\n%s\n%s\n' % (rcp, pop, gdp))
-            cfgfile.write('%s\n' % outfile)
+            cfgfile.write(f'{rcp}\n{pop}\n{gdp}\n')
+            cfgfile.write(f'{outfile}\n')
             if transfer:
                 cfgfile.write('no-data\n')
             else:
-                cfgfile.write('%s\n' % chflow_file)
+                cfgfile.write(f'{chflow_file}\n')
             for var in ['wdirr', 'wdliv', 'wdelec', 'wdmfg', 'wdtotal', 'wddom', 'wsi']:
                 if transfer:
                     # for water transfer cases, we don't have any gridded data, so substitute a grid full of NaN.
                     cfgfile.write('no-data\n')
                 else:
-                    cfgfile.write('%s\n' % water_rslts[var])
-            cfgfile.write('%s\n' % water_rslts['pop-demo'])
+                    cfgfile.write(f'{water_rslts[var]}\n')
+            cfgfile.write(f'{water_rslts["pop-demo"]}\n')
             for var in ['basin-supply', 'basin-wdirr', 'basin-wdliv', 'basin-wdelec', 'basin-wdmfg', 'basin-wdtot', 'basin-wddom', 'basin-wsi',
                         'rgn-supply', 'rgn-wdirr', 'rgn-wdliv', 'rgn-wdelec', 'rgn-wdmfg', 'rgn-wdtot', 'rgn-wddom', 'rgn-wsi']:
-                cfgfile.write('%s\n' % water_rslts[var])
+                cfgfile.write(f'{water_rslts[var]}\n')
 
             cfgfile.close()
 

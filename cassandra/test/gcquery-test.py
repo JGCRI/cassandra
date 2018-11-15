@@ -18,9 +18,9 @@ except IndexError:
 # enable this code to run from the gcam/test/ directory
 sys.path.append('../..')
 
-from gcam import util
-from gcam.components import GlobalParamsComponent
-from gcam.water import waterdisag
+import util
+from components import GlobalParamsComponent
+from water import waterdisag
 
 # Test Class
 

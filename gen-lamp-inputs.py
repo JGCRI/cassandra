@@ -18,7 +18,7 @@ for gcm in gcms:
         runname = '%s-%s' % (gcm, scen)
 
         cfgfile = 'lamp-inputs/%s.cfg' % runname
-        print 'cfgfile = %s' % cfgfile
+        print('cfgfile = %s' % cfgfile)
         cfgfiles.append(cfgfile)
 
         with open(cfgfile, 'w') as cfg:

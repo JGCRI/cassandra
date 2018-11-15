@@ -42,14 +42,14 @@ def config_parse(cfgfile_name):
             sectnmatch = sectnpat.match(line)
             if sectnmatch:
                 section = sectnmatch.group(1)
-                print "parser starting section:  %s" % section
+                print(f"parser starting section:  {section}")
 
                 if not section.lower() == "global":
                     # Section header starts a new component
                     # create the new component:  the section name is the component class
                     # TODO: is the input from the config file trusted enough to do it this way?
-                    component_create = "%s(capability_table)" % section
-                    print "component_create statement:  %s\n" % component_create
+                    component_create = f"{section}(capability_table)"
+                    print(f"component_create statement:  {component_create}\n")
                     component = eval(component_create)
                 else:
                     # This is kind of a wart because I want to call
@@ -68,12 +68,12 @@ def config_parse(cfgfile_name):
 
             kvmatch = keyvalpat.match(line)
             if not kvmatch:
-                raise RuntimeError("Malformed line in config file:\n%s" % line)
+                raise RuntimeError(f"Malformed line in config file:\n{line}")
 
             key = kvmatch.group(1).lstrip().rstrip()
             val = kvmatch.group(2).lstrip().rstrip()
 
-            print "parser got key= %s\tval= %s" % (key, val)
+            print(f"parser got key= {key}\tval= {val}")
 
             component.addparam(key, val)
 
@@ -89,18 +89,12 @@ def config_parse(cfgfile_name):
 
 
 if __name__ == "__main__":
-    import sys
-    import os
-
-    # arrange so that when run from the top-level directory we still find
-    # the components we want to load.
-    sys.path.append(os.getcwd()+'/src')
     from cassandra.components import *
 
     try:
         (component_list, cap_table) = config_parse(sys.argv[1])
     except IndexError:
-        print __doc__
+        print(__doc__)
         sys.exit(0)
 
     # We will look up "global" in the cap_table and process any
@@ -110,7 +104,7 @@ if __name__ == "__main__":
     threads = []
 
     for component in component_list:
-        print "running %s" % component.__class__
+        print(f"running {str(component.__class__)}")
         threads.append(component.run())
 
     # Wait for all threads to complete before printing end message.
@@ -121,12 +115,12 @@ if __name__ == "__main__":
     fail = 0
     for component in component_list:
         if component.status != 1:
-            print 'Component %s returned failure status\n' % str(component.__class__)
+            print(f'Component {str(component.__class__)} returned failure status\n')
             fail += 1
 
     if fail == 0:
-        print '\n****************All components completed successfully.'
+        print('\n****************All components completed successfully.')
     else:
-        print '\n****************%d components failed.' % fail
+        print(f'\n****************{fail} components failed.')
 
-    print "\nFIN."
+    print("\nFIN.")
