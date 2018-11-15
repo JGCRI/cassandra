@@ -42,7 +42,7 @@ import threading
 import tempfile
 from sys import stdout
 from sys import stderr
-import cassandra.util
+from cassandra import util
 
 
 class ComponentBase(object):
