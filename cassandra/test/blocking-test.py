@@ -18,6 +18,7 @@ class TestBlocking(unittest.TestCase):
         self.d3 = DummyComponent(capability_table, 'Carol')
 
         self.component_list = [self.d1, self.d2, self.d3]
+        self.names = [c.name for c in self.component_list]
 
     def testDelay(self):
         """Test that the time delay is working as expected."""
@@ -46,15 +47,37 @@ class TestBlocking(unittest.TestCase):
         self.assertEqual(finish_seconds[1], 2)  # 1s wait + 1s finish
         self.assertEqual(finish_seconds[2], 1)  # 1s finish
 
+    def testBlocking(self):
+        """Test that a component is blocked while waiting for another."""
+        finish_delay = 100
+
+        # Make each component depend on all of the components in front of it
+        for i, c in enumerate(self.component_list):
+            c.addparam('capability_reqs', self.names[i + 1:])
+            c.addparam('request_delays', [0 for _ in self.names])
+            c.addparam('finish_delay', finish_delay)
+
+        self.runComponents()
+        self.confirmSuccess()
+
+        # Calculate the ms it took to ran the first component
+        d1_time = self.d1.results['times'][-1][0]
+        d1_ms = round(d1_time, 1) * 1000
+
+        # Should have had to wait for each component to finish; the only delay
+        # in this test is the finish delay
+        self.assertEqual(d1_ms, finish_delay * len(self.component_list))
+
     def confirmSuccess(self):
+        """Ensure each component finished successfully."""
         for component in self.component_list:
             self.assertEqual(component.status, 1)
 
     def runComponents(self):
+        """Run each component."""
         threads = []
 
         for component in self.component_list:
-            print(f"running {str(component.__class__)}")
             threads.append(component.run())
 
         # Wait for all threads to complete before printing end message.
