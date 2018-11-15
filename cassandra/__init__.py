@@ -9,3 +9,6 @@ gcam.land for land use downscaling.  The package also contains gcam_driver, a
 stand-alone program for running the automation system.
 
 """
+
+
+__all__ = ['util', 'water', 'components']
