@@ -1089,3 +1089,37 @@ class NetcdfDemoComponent(ComponentBase):
             return subprocess.call([mat2nc, tempfilename])
         finally:
             os.unlink(tempfilename)
+
+
+class DummyComponent(ComponentBase):
+    """Dummy component for tests
+
+    A dummy component with parameters for delaying requests and outputs in order
+    to test interactions between multiple components.
+
+    The idea is that if the the name of the capabilities being declared are
+    derived from each component instance’s parameters, it is possible to
+    configure a setup cleverly to create multiple copies that interact in any
+    manner of one's choosing.
+
+    params:
+     capability_out - name of the output capability
+    capability_reqs - list of the capabilities this component requests
+     request_delays - list of time delays (ms) before each request is made
+       finish_delay - delay (ms) before the component finalizes and exports
+    """
+
+    def __init__(self, cap_tbl, capability_out='dummy'):
+        super(DummyComponent, self).__init__(cap_tbl)
+        cap_tbl[capability_out] = self
+
+    def run_component(self):
+        """Run, request, delay, output."""
+
+        capability_reqs = self.params['capability_reqs']
+        request_delays = self.params['request_delays']
+        finish_delay = self.params['finish_delay']
+
+        # Fill in here
+        
+        return 0
