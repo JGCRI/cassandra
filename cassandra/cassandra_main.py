@@ -5,7 +5,7 @@
 
   This program will run the cassandra model coupling system using the
   configuration details from the configuration file supplied on the
-  command line.  The configuraiton file format and contents are
+  command line.  The configuration file format and contents are
   described in the Cassandra Users' Guide.
 
 """
@@ -16,7 +16,7 @@ import threading
 
 
 def config_parse(cfgfile_name):
-    """Parse the configuraiton file."""
+    """Parse the configuration file."""
 
     # initialize the structures that will receive the data we are
     # parsing from the file
