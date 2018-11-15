@@ -41,14 +41,14 @@ def gcam_parse(cfgfile_name):
             sectnmatch = sectnpat.match(line)
             if sectnmatch:
                 section = sectnmatch.group(1)
-                print "parser starting section:  %s" % section
+                print("parser starting section:  %s" % section)
 
                 if not section.lower() == "global":
                     # Section header starts a new component
                     # create the new component:  the section name is the component class
                     # TODO: is the input from the config file trusted enough to do it this way?
                     component_create = "%s(capability_table)" % section
-                    print "component_create statement:  %s\n" % component_create
+                    print("component_create statement:  %s\n" % component_create)
                     component = eval(component_create)
                 else:
                     # This is kind of a wart because I want to call
@@ -72,7 +72,7 @@ def gcam_parse(cfgfile_name):
             key = kvmatch.group(1).lstrip().rstrip()
             val = kvmatch.group(2).lstrip().rstrip()
 
-            print "parser got key= %s\tval= %s" % (key, val)
+            print("parser got key= %s\tval= %s" % (key, val))
 
             component.addparam(key, val)
 
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     try:
         (component_list, cap_table) = gcam_parse(sys.argv[1])
     except IndexError:
-        print __doc__
+        print(__doc__)
         sys.exit(0)
 
     # We will look up "global" in the cap_table and process any
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     threads = []
 
     for component in component_list:
-        print "running %s" % component.__class__
+        print("running %s" % component.__class__)
         threads.append(component.run())
 
     # Wait for all threads to complete before printing end message.
@@ -114,12 +114,12 @@ if __name__ == "__main__":
     fail = 0
     for component in component_list:
         if component.status != 1:
-            print 'Component %s returned failure status\n' % str(component.__class__)
+            print('Component %s returned failure status\n' % str(component.__class__))
             fail += 1
 
     if fail == 0:
-        print '\n****************All components completed successfully.'
+        print('\n****************All components completed successfully.')
     else:
-        print '\n****************%d components failed.' % fail
+        print('\n****************%d components failed.' % fail)
 
-    print "\nFIN."
+    print("\nFIN.")

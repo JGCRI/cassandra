@@ -26,7 +26,7 @@ for gcm in gcms:
 
             cfgfile = 'runconfig/pplant-%s.cfg' % runname
 
-            print 'cfgfile = %s' % cfgfile
+            print('cfgfile = %s' % cfgfile)
 
             with open(cfgfile, 'w') as cfg:
                 # write global section (same for all runs)

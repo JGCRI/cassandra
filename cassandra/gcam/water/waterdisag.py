@@ -445,7 +445,7 @@ def proc_irr_share(infilename, outfile):
     """
     # initialize table with zeros.  Any combination not contained in
     # the table will default to 0.
-    print 'irr share infile: %s' % infilename
+    print('irr share infile: %s' % infilename)
     irr_share = {}
     for region in _regions_ordered:
         rgnno = _regions_ordered.index(region)+1
