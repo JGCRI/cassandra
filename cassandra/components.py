@@ -1111,15 +1111,33 @@ class DummyComponent(ComponentBase):
 
     def __init__(self, cap_tbl, capability_out='dummy'):
         super(DummyComponent, self).__init__(cap_tbl)
-        cap_tbl[capability_out] = self
+        self.name = capability_out
+        cap_tbl[self.name] = self
 
     def run_component(self):
         """Run, request, delay, output."""
+        from time import time, sleep
+
+        st = time()
+        st_msg = (0, f'Start {self.name}')
+
+        data = [st_msg]  # list of tuples: (time, message)
 
         capability_reqs = self.params['capability_reqs']
         request_delays = self.params['request_delays']
         finish_delay = self.params['finish_delay']
 
-        # Fill in here
-        
+        for i, req in capability_reqs:
+            delay = request_delays[i]
+            sleep(delay / 1000.0)  # ms to s
+
+            data.append((time() - st), f'Requesting data from {req}')
+            self.cap_table[req].fetch()
+            data.append((time() - st), f'Recieved data from {req}')
+
+        sleep(finish_delay / 1000.0)
+
+        self.results['times'] = data
+        data.append((time() - st), f'Done {self.name}')
+
         return 0
