@@ -214,7 +214,7 @@ class ComponentBase(object):
         # By this point, the component should have run.  If status is not success, then
         # there has been an error.
         if self.status != 1:
-            raise RuntimeError("%s: wait() returned with non-success status!" % self.__class__)
+            raise RuntimeError(f"{self.__class__}: wait() returned with non-success status!")
 
         return self.results
 
@@ -626,8 +626,7 @@ class HydroComponent(ComponentBase):
         print('Running the matlab hydrology code')
         with open(logfile, "w") as logdata, open("/dev/null", "r") as null:
             arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread', '-r',
-                       f"run_future_hydro({prefile}, {tempfile}, {dtrfile}, {initstorage}, {gridrgn}, {startmonth}, {qoutfile}, {foutfile}, {petoutfile}, {basinqfile}, {rgnqfile}"]
-                       "run_future_hydro('%s','%s','%s','%s','%s', %d, '%s','%s','%s', '%s','%s', '/dev/null');exit" %
+                       f"run_future_hydro('{prefile}', '{tempfile}', '{dtrfile}', '{initstorage}', '{gridrgn}', '{startmonth}', '{qoutfile}', '{foutfile}', '{petoutfile}', '{basinqfile}', '{rgnqfile}', '/dev/null');exit"]
             sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
                                   cwd=workdir)
             rc = sp.wait()
@@ -635,7 +634,7 @@ class HydroComponent(ComponentBase):
         if util.allexist(alloutfiles):
             return rc
         else:
-            stderr.write('[HydroComponent]: Some output files missing.  Check logfile (%s) for more information\n' % logfile)
+            stderr.write(f'[HydroComponent]: Some output files missing.  Check logfile ({logfile}) for more information\n')
             return 1            # nonzero return code indicates failure
     # end of run_component()
 
@@ -746,25 +745,24 @@ class HistoricalHydroComponent(ComponentBase):
         genparams = self.cap_tbl['general'].fetch()
         gridrgn = util.abspath('grid2rgn_nonag.csv', genparams['rgnconfig'], 'HistoricalHydroComponent')
         print(f'[HistoricalHydroComponent]: gridrgn = {gridrgn} ')
-        print(f'[HistoricalHydroComponent]: rgnconfig = {genparams['rgnconfig']} ')
+        print(f'[HistoricalHydroComponent]: rgnconfig = {genparams["rgnconfig"]} ')
 
         # If we get here, then we need to run the historical
         # hydrology.  Same comments apply as to the regular hydrology
         # component.
-        print(f'Running historical hydrology for gcm= {gcm}   runid= {runid}'
+        print(f'Running historical hydrology for gcm= {gcm}   runid= {runid}')
         with open(logfile, 'w') as logdata, open('/dev/null', 'r') as null:
-            arglist=['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread', '-r',
-                       "run_historical_hydro('%s', '%s', '%s', '%s', %d, '%s', '%s','%s', '%s', '%s', '%s', '/dev/null');exit" %
-                       (prefile, tempfile, dtrfile, gridrgn, 1, chstorfile, qoutfile, foutfile, petoutfile, basinqtblfile, rgnqtblfile)]
-            sp=subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
+            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread', '-r',
+                       f"run_future_hydro('{prefile}', '{tempfile}', '{dtrfile}', '{gridrgn}', '{1}', '{chstorfile}', '{qoutfile}', '{foutfile}', '{petoutfile}', '{basinqfile}', '{rgnqtblfile}', '/dev/null');exit"]
+            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
                                   cwd=workdir)
-            rc=sp.wait()
+            rc = sp.wait()
         # check to see if the outputs were actually created; matlab will sometimes fail silently
         if util.allexist(alloutfiles):
             return rc
         else:
             stderr.write(
-                '[HistoricalHydroComponent]: Some output files were not created.  Check logfile (%s) for details.\n' % logfile)
+                f'[HistoricalHydroComponent]: Some output files were not created.  Check logfile ({logfile}) for details.\n')
             return 1            # nonzero indicates failure
 
 # This is how you run the disaggregation code
@@ -932,7 +930,7 @@ class WaterDisaggregationComponent(ComponentBase):
                 "rgn-supply", "rgn-wdtot", "rgn-wddom", "rgn-wdelec", "rgn-wdirr", "rgn-wdliv", "rgn-wdmfg", "rgn-wdmin", "rgn-wsi"]
         allfiles=1
         for var in vars:
-            filename="%s/%s-%s-%s.dat" % (outputdir, var, scenariotag, runid)
+            filename=f"{outputdir}/{var}-{scenariotag}-{runid}.dat"
             self.results[var]=filename
             if not os.path.exists(filename):
                 print(f'File {filename} does not exist.  Running WaterDisaggregationComponent.\n')
@@ -949,8 +947,8 @@ class WaterDisaggregationComponent(ComponentBase):
         print(f'disaggregation results:\n{str(self.results)}')
 
         queryfiles=['batch-land-alloc.xml', 'batch-population.xml', 'batch-water-ag.xml',
-                      'batch-water-dom.xml', 'batch-water-elec.xml', 'batch-water-livestock.xml',
-                      'batch-water-mfg.xml', 'batch-water-mining-alt.xml']
+                    'batch-water-dom.xml', 'batch-water-elec.xml', 'batch-water-livestock.xml',
+                    'batch-water-mfg.xml', 'batch-water-mining-alt.xml']
         outfiles=['batch-land-alloc.csv', 'batch-population.csv', 'batch-water-ag.csv',
                     'batch-water-dom.csv', 'batch-water-elec.csv', 'batch-water-livestock.csv',
                     'batch-water-mfg.csv', 'batch-water-mining.csv']
@@ -1069,22 +1067,22 @@ class NetcdfDemoComponent(ComponentBase):
             (fd, tempfilename)=tempfile.mkstemp()
             cfgfile=os.fdopen(fd, "w")
 
-            cfgfile.write('%s\n%s\n%s\n' % (rcp, pop, gdp))
-            cfgfile.write('%s\n' % outfile)
+            cfgfile.write(f'{rcp}\n{pop}\n{gdp}\n')
+            cfgfile.write(f'{outfile}\n')
             if transfer:
                 cfgfile.write('no-data\n')
             else:
-                cfgfile.write('%s\n' % chflow_file)
+                cfgfile.write(f'{chflow_file}\n')
             for var in ['wdirr', 'wdliv', 'wdelec', 'wdmfg', 'wdtotal', 'wddom', 'wsi']:
                 if transfer:
                     # for water transfer cases, we don't have any gridded data, so substitute a grid full of NaN.
                     cfgfile.write('no-data\n')
                 else:
-                    cfgfile.write('%s\n' % water_rslts[var])
-            cfgfile.write('%s\n' % water_rslts['pop-demo'])
+                    cfgfile.write(f'{water_rslts[var]}\n')
+            cfgfile.write(f'{water_rslts["pop-demo"]}\n')
             for var in ['basin-supply', 'basin-wdirr', 'basin-wdliv', 'basin-wdelec', 'basin-wdmfg', 'basin-wdtot', 'basin-wddom', 'basin-wsi',
                         'rgn-supply', 'rgn-wdirr', 'rgn-wdliv', 'rgn-wdelec', 'rgn-wdmfg', 'rgn-wdtot', 'rgn-wddom', 'rgn-wsi']:
-                cfgfile.write('%s\n' % water_rslts[var])
+                cfgfile.write(f'{water_rslts[var]}\n')
 
             cfgfile.close()
 
