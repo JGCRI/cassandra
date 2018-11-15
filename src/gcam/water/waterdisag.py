@@ -1,5 +1,5 @@
 #!/bin/env python
-"""Functions supporting the water demand disaggregation module."""
+"""Functions supporting the water demand disaggregation component."""
 
 
 from gcam import util
@@ -37,7 +37,7 @@ def init_rgn_tables(rgnconfig):
     """Read the region-specific data tables in the rgnconfig directory.
 
     These tables are used internally for the calculations in this
-    (python) module.
+    (python) component.
 
     """
 

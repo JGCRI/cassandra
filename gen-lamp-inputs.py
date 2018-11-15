@@ -1,13 +1,13 @@
 import os
 
 hist_runid = 'r1i1p1_195001_200512'
-fut_runid  = 'r1i1p1_200601_210012'
+fut_runid = 'r1i1p1_200601_210012'
 
 #gcms = ['GFDL_CM3', 'HadGEM2_ES', 'IPSL_CM5A_LR']
 # gcms = ['GFDL_CM3', 'IPSL_CM5A_LR'] # HadGEM2 needs special treatment
 # scenarios = ['rcp45','rcp85']
 gcms = ['CCSM4', 'CESM1_CAM5', 'CSIRO_Mk3_6_0', 'FIO_ESM', 'GFDL_CM3',
-        'GFDL_ESM2G', 'GFDL_ESM2M', 'GISS_E2_R','ACCESS1_0', 'bcc_csm1_1_m',
+        'GFDL_ESM2G', 'GFDL_ESM2M', 'GISS_E2_R', 'ACCESS1_0', 'bcc_csm1_1_m',
         'bcc_csm1_1', 'BNU_ESM', 'CanESM2', 'CESM1_BGC', 'CMCC_CM', 'CNRM_CM5',
         'EC_EARTH', 'FGOALS_g2', 'IPSL_CM5A_LR']
 scenarios = ['rcp45', 'rcp60', 'rcp85', 'rcp26']
@@ -15,23 +15,23 @@ scenarios = ['rcp45', 'rcp60', 'rcp85', 'rcp26']
 for gcm in gcms:
     cfgfiles = []
     for scen in scenarios:
-        runname = '%s-%s'%(gcm,scen)
+        runname = '%s-%s' % (gcm, scen)
 
         cfgfile = 'lamp-inputs/%s.cfg' % runname
         print 'cfgfile = %s' % cfgfile
         cfgfiles.append(cfgfile)
 
         with open(cfgfile, 'w') as cfg:
-            ## write global section (same for all runs)
+            # write global section (same for all runs)
             cfg.write('[Global]\nModelInterface = /people/link593/wrk/ModelInterface/ModelInterface.jar\n' +
-                      'DBXMLlib = /people/link593/lib\n'+
+                      'DBXMLlib = /people/link593/lib\n' +
                       'inputdir = ./input-data\n' +
                       'rgnconfig = rgn32\n\n')
 
-            ## write historical hydro section
-            cfg.write('[HistoricalHydroModule]\nworkdir = ../gcam-hydro\n' +
+            # write historical hydro section
+            cfg.write('[HistoricalHydroComponent]\nworkdir = ../gcam-hydro\n' +
                       'inputdir = /pic/scratch/rpl/CMIP5_preprocessed\n' +
-                      'outputdir = output/cmip5\n'+
+                      'outputdir = output/cmip5\n' +
                       'clobber = False\n')
             logfilestr = 'logfile = ../gcam-hydro/logs/%s-historical-hydro.txt\n' % gcm
             cfg.write(logfilestr)
@@ -40,8 +40,8 @@ for gcm in gcms:
             runidstr = 'runid = %s\n' % hist_runid
             cfg.write(runidstr)
 
-            ## write future hydro section
-            cfg.write('\n[HydroModule]\nworkdir = ../gcam-hydro\n' +
+            # write future hydro section
+            cfg.write('\n[HydroComponent]\nworkdir = ../gcam-hydro\n' +
                       'inputdir = /pic/scratch/rpl/CMIP5_preprocessed\n' +
                       'outputdir = output/cmip5\n' +
                       'clobber = False\n')
@@ -78,4 +78,3 @@ date
         for cfgfile in cfgfiles:
             bat.write('time ./gcam-driver ./%s\n' % cfgfile)
             bat.write('date\n')
-            
