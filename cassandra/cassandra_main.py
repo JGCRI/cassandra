@@ -1,11 +1,12 @@
 #!/bin/env python
-"""GCAM driver
+"""Cassandra model coupling framework
 
-  usage:  gcam_driver.py <configfile>
+  usage:  cassandra.py <configfile>
 
-  This program will run the GCAM automation system using the configuration details
-  from the configuration file described on the command line.  The configuraiton
-  file format and contents are described in the GCAM Automation Users' Guide.
+  This program will run the cassandra model coupling system using the
+  configuration details from the configuration file supplied on the
+  command line.  The configuration file format and contents are
+  described in the Cassandra Users' Guide.
 
 """
 
@@ -14,8 +15,8 @@ import re
 import threading
 
 
-def gcam_parse(cfgfile_name):
-    """Parse the configuraiton file for the GCAM driver."""
+def config_parse(cfgfile_name):
+    """Parse the configuration file."""
 
     # initialize the structures that will receive the data we are
     # parsing from the file
@@ -37,7 +38,7 @@ def gcam_parse(cfgfile_name):
             if(line == "" or line[0] == '#'):
                 continue
 
-            # check for section header.  Section headers appear in square brackets:  [gcam_component]
+            # check for section header.  Section headers appear in square brackets. e.g.: [gcam_component]
             sectnmatch = sectnpat.match(line)
             if sectnmatch:
                 section = sectnmatch.group(1)
@@ -84,7 +85,7 @@ def gcam_parse(cfgfile_name):
         component.finalize_parsing()
 
     return (component_list, capability_table)
-# end of gcam_parse
+# end of config_parse
 
 
 if __name__ == "__main__":
@@ -94,10 +95,10 @@ if __name__ == "__main__":
     # arrange so that when run from the top-level directory we still find
     # the components we want to load.
     sys.path.append(os.getcwd()+'/src')
-    from gcam.components import *
+    from cassandra.components import *
 
     try:
-        (component_list, cap_table) = gcam_parse(sys.argv[1])
+        (component_list, cap_table) = config_parse(sys.argv[1])
     except IndexError:
         print __doc__
         sys.exit(0)

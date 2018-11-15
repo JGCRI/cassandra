@@ -1,13 +1,14 @@
-"""Definitions for the components for GCAM and associated downstream models.
+"""Definitions for the components for models participating in the framework.
 
-A GCAM "component" is a functional unit that performs a specific step in
-the GCAM processing pipeline. A GCAM component may be implemented in one or
-several python components of its own (as in the water disaggregation
-component), or it may be completely contained in this component.
+A "component" is a functional unit that performs a specific step in
+the coupled model processing pipeline.  Generally, a component will
+correspond to one of the models being coupled, but components can also
+implement utility processes, such as formatting and packaging output,
+and particularly complex models could be split over several components.
 
 Classes:
 
-GcamComponentBase     - Base class for all GCAM components.  Provides the
+ComponentBase         - Base class for all components.  Provides the
                         interface, as well as services like managing
                         threads, locks, and condition variables.
 
@@ -22,14 +23,14 @@ HistoricalHydroComponent - Run the historical hydrology calculation.
 WaterDisaggregationComponent - Run the water disaggregation calculation.
 
 NetcdfDemoComponent   - Package outputs into a netCDF file for the
-                        Decision Theater Demo.
+                        February 2015 demo.
 
 """
 
 # TODO: many of these classes have gotten a bit long.  It would be
 # better to refactor them so that the main functionality is
-# implemented in a separate python component for each GCAM component, with
-# the GCAM component subclass providing a thin wrapper that grabs inputs
+# implemented in a separate python module for each component, with
+# the class derived from ComponentBase providing a thin wrapper that grabs inputs
 # needed from other components and passes them to a main function in the
 # relevant python component.
 
@@ -44,8 +45,8 @@ from sys import stderr
 from gcam import util
 
 
-class GcamComponentBase(object):
-    """Common base class for all of the GCAM components (i.e., functional units).
+class ComponentBase(object):
+    """Common base class for all components (i.e., functional units) in the system.
 
     We can put any utility functions that are common to all components
     here, but its main purpose is to provide all the multithreading
@@ -115,7 +116,7 @@ class GcamComponentBase(object):
     """
 
     def __init__(self, cap_tbl):
-        """Initialize the GCAM component base.
+        """Initialize the component base.
 
         Every subclass __init__ method should call this method as its
         first action.  The cap_tbl argument is a dictionary linking
@@ -127,7 +128,7 @@ class GcamComponentBase(object):
         cap_tbl['gcam_core'] = self
 
         The capability table will be available as self.cap_tbl for use
-        in a subclass's methods.  Since gcam_driver passes the same
+        in a subclass's methods.  Since cassandra passes the same
         capacity table to each subclass instance initialization, by
         the time a component starts running the table will contain an
         index of all the active components in the calculation.
@@ -244,13 +245,13 @@ class GcamComponentBase(object):
         self.params[key] = value
 
     def run_component(self):
-        """Subclasses of GcamComponentBase are required to override this method."""
+        """Subclasses of ComponentBase are required to override this method."""
 
-        raise NotImplementedError("GcamComponentBase is not a runnable class.")
+        raise NotImplementedError("ComponentBase is not a runnable class.")
 
 
 # class to hold the general parameters.
-class GlobalParamsComponent(GcamComponentBase):
+class GlobalParamsComponent(ComponentBase):
     """Class to hold the general parameters for the calculation.
 
     Technically this isn't a component as such; it doesn't run anything,
@@ -324,7 +325,7 @@ class GlobalParamsComponent(GcamComponentBase):
         return 0                # nothing to do here.
 
 
-class GcamComponent(GcamComponentBase):
+class GcamComponent(ComponentBase):
     """Provide the 'gcam-core' capability.
 
     This component runs the GCAM core model, making the location of the
@@ -445,7 +446,7 @@ class GcamComponent(GcamComponentBase):
 # matlab -nodisplay -nosplash -nodesktop -r "run_future_hydro('<gcm>','<scenario>');exit" > & outputs/pcm-a1-out.txt < /dev/null
 
 
-class HydroComponent(GcamComponentBase):
+class HydroComponent(ComponentBase):
     """Provide the 'gcam-hydro' capability.
 
     This is the future hydrology calculation.  For the historical
@@ -639,7 +640,7 @@ class HydroComponent(GcamComponentBase):
     # end of run_component()
 
 
-class HistoricalHydroComponent(GcamComponentBase):
+class HistoricalHydroComponent(ComponentBase):
     """Class for historical hydrology run.
 
     This is similar to, but not quite the same as, the main hydro component.
@@ -770,7 +771,7 @@ class HistoricalHydroComponent(GcamComponentBase):
 # matlab -nodisplay -nosplash -nodesktop -r "run_disaggregation('<runoff-file>', '<chflow-file>', '<gcam-filestem>');exit" >& <logfile> < /dev/null
 
 
-class WaterDisaggregationComponent(GcamComponentBase):
+class WaterDisaggregationComponent(ComponentBase):
     """Class for the water demand disaggregation calculation
 
     This component makes use of the GCAMhydro code (which currently
@@ -1021,7 +1022,7 @@ class WaterDisaggregationComponent(GcamComponentBase):
 # class for the netcdf-demo builder
 
 
-class NetcdfDemoComponent(GcamComponentBase):
+class NetcdfDemoComponent(ComponentBase):
     """Component to build NetCDF output for the February 2015 demo.
 
     params:
@@ -1034,6 +1035,8 @@ class NetcdfDemoComponent(GcamComponentBase):
 
     Component dependences:  HydroComponent, WaterDisaggregationComponent
 
+    This component is specific to a particular demo and probably can't easily be adapted for any other
+    purpose.  In that sense, it's obsolete and should be considered deprecated.
     """
 
     def __init__(self, cap_tbl):
