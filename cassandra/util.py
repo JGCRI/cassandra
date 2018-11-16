@@ -147,7 +147,7 @@ def gcam_query(batchqfiles, dbxmlfiles, inputdir, outfiles):
     if len(dbxmllist) != len(qlist) or len(outlist) != len(qlist):
         raise RuntimeError("Mismatch in input lengths for gcam_query.")
 
-    genparams = global_params.fetch()
+    genparams = global_params.fetch('general')
     ModelInterface = genparams["ModelInterface"]
     DBXMLlib = genparams["DBXMLlib"]
 

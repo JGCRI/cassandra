@@ -12,6 +12,10 @@ ComponentBase         - Base class for all components.  Provides the
                         interface, as well as services like managing
                         threads, locks, and condition variables.
 
+CapabilityNotFound    - Exception class raised when a component requests
+                        a capability that is not provided by any
+                        component in the system.
+
 GlobalParamsComponent - Store parameters common to all components.
 
 GcamComponent         - Run the GCAM core model.
@@ -44,6 +48,14 @@ from sys import stdout
 from sys import stderr
 from cassandra import util
 
+# This class is here to make it easy for a class to ignore failures to
+# find a particular capability in fetch() while still failing on any
+# other sort of error.
+
+
+class CapabilityNotFound(RuntimeError):
+    pass
+
 
 class ComponentBase(object):
     """Common base class for all components (i.e., functional units) in the system.
@@ -72,14 +84,23 @@ class ComponentBase(object):
     run_component_wrapper(): used internally by run().  Don't monkey around
                              with this function.
 
-    fetch(): retrieve the component's results.  If the component hasn't
-             completed yet, wait to be notified of completion.  This
-             mechanism implicitly enforces correct ordering between
-             components.  Note that we don't make any checks for
-             deadlock caused by circular dependencies.
+    fetch(): retrieve the component's results for a single capability.
+             Takes a capability name as an argument.  If the capability
+             does not belong to this component, performs a lookup and
+             calls fetch() on the component that has the requested data.
+             If the component hasn't completed yet, wait to be notified
+             of completion.  This mechanism implicitly enforces correct
+             ordering between components.  Note that we don't make any
+             checks for deadlock caused by circular dependencies.
 
     addparam(): Add a key and value to the params array.  Generally
                 this should only be done in the config file parser.
+
+    addcapability(): Add a capability to the capability table.
+
+    addresults(): Update the results for a single capability. Use this
+                  rather than updating self.results directly, as this
+                  method ensures that the capability exists.
 
     Methods that can be extended (but not overridden; you must be sure
          to call the base method):
@@ -137,7 +158,6 @@ class ComponentBase(object):
         self.status = 0         # status indicator: 0- not yet run, 1- complete, 2- error
         self.results = {}
         self.params = {}
-        self.results["changed"] = 1
         self.cap_tbl = cap_tbl  # store a reference to the capability lookup table
         self.condition = threading.Condition()
 
@@ -190,17 +210,50 @@ class ComponentBase(object):
                 self.condition.notify_all()      # release any waiting threads
         # end of with block:  lock on condition var released.
 
-    def fetch(self):
-        """Return the results of the calculation as a dictionary.
+    def fetch(self, capability):
+        """Return the data associated with the named capability.
 
-        The results aren't returned from run() because it will run
-        asynchronously.  This method waits if necessary and returns
-        the results, checks whether the run was successful (indicated
-        by self.status), and if so returns the results dictionary.  If
-        the run_component() method failed, the variable will so indicate, and
-        an exception will be raised.
+        Components don't return results from run() because it will run
+        asynchronously.  Instead, if you want the results associated
+        with a particular capability, you call this method with the
+        name of the capability.  If the capability does not exist in
+        the system, a CapabilityNotFound exception will be thrown.
+
+        Internally, this method first looks up the component that has
+        the requested data and forwards the request to that
+        component's fetch method.  That call waits if necessary, then
+        checks whether the run was successful (indicated by
+        self.status), and if so returns the requested data.  If the
+        run_component() method failed, the variable will so indicate,
+        and an exception will be raised.
+
+        Components should store their results by calling
+        self.addresults(capability-name, data), which adds the results
+        in the self.results dictionary, which is where this method
+        will look for them.  The system levies no particular
+        requirements on the format of data returned, so components
+        should publish a complete description of their data in their
+        documentation.
+
+        WARNING: if a component tries to fetch a capability that it,
+        itself, provides, this will lead to instant deadlock.  So,
+        don't do that.
 
         """
+
+        try:
+            provider = self.cap_tbl[capability]
+        except KeyError:
+            raise CapabilityNotFound(capability)
+
+        if self is not provider:
+            # This is a request (presumably originating in our own run
+            # method) for a capability in another component.  Forward
+            # it to that component.
+            return provider.fetch(capability)
+
+        # If we get to here, then this is a request from another
+        # component for some data we are holding.
 
         # If the component is currently running, then the condition
         # variable will be locked, and we will block when the 'with'
@@ -216,7 +269,7 @@ class ComponentBase(object):
         if self.status != 1:
             raise RuntimeError(f"{self.__class__}: wait() returned with non-success status!")
 
-        return self.results
+        return self.results[capability]
 
     def finalize_parsing(self):
         """Process parameters that are common to all components (e.g. clobber).
@@ -244,8 +297,32 @@ class ComponentBase(object):
 
         self.params[key] = value
 
+    def addcapability(self, capability):
+        """Add a capability to the capability table."""
+        if capability in self.cap_tbl:
+            raise RuntimeError(f'Duplicate definition of capability {capability}.')
+        self.cap_tbl[capability] = self
+
+    def addresults(self, capability, res):
+        """Add data to the specified capability of this component."""
+        if capability not in self.cap_tbl:
+            raise CapabilityNotFound(capability)
+
+        if self.cap_tbl[capability] is not self:
+            raise RuntimeError(f'Component {self.__class__} does not own capability {capability}.')
+
+        self.results[capability] = res
+
     def run_component(self):
-        """Subclasses of ComponentBase are required to override this method."""
+        """Subclasses of ComponentBase are required to override this method.
+
+        Components' implementations of this method should add the
+        results of their calculations to the self.results dictionary
+        by calling self.addresults(<capability-name>, data), where
+        capability-name is the name of the capability being provided.
+        A component can provide multiple capabilities, with each one
+        getting its own entry in the results dictionary.
+        """
 
         raise NotImplementedError("ComponentBase is not a runnable class.")
 
@@ -293,34 +370,36 @@ class GlobalParamsComponent(ComponentBase):
         """
         super(GlobalParamsComponent, self).__init__(cap_tbl)
 
-        self.results = self.params  # this is a reference copy, so any entries added to
-        # params will also appear in results.
+        self.addcapability('general')
+
+        # this is a reference copy, so any entries added to params will also appear in results.
+        self.addresults('general', self.params)
 
         print('General parameters as input:')
-        print(self.results)
-        cap_tbl["general"] = self
+        print(self.results['general'])
 
         # We need to allow gcamutil access to these parameters, since it doesn't otherwise know how to find the
-        # global params component.
+        # global params component.  <- gross.  we need a better way to do this.
         util.global_params = self
 
     def run_component(self):
         """Set the default value for the optional parameters, and convert filenames to absolute paths."""
-        self.results['ModelInterface'] = util.abspath(self.results['ModelInterface'])
-        self.results['DBXMLlib'] = util.abspath(self.results['DBXMLlib'])
+        genrslt = self.results['general']
+        genrslt['ModelInterface'] = util.abspath(self.results['general']['ModelInterface'])
+        genrslt['DBXMLlib'] = util.abspath(self.results['general']['DBXMLlib'])
 
-        if 'inputdir' in self.results:
-            inputdir = self.results['inputdir']
+        if 'inputdir' in genrslt:
+            inputdir = genrslt['inputdir']
         else:
             inputdir = './input-data'
-        self.results['inputdir'] = util.abspath(inputdir, os.getcwd())
+        genrslt['inputdir'] = util.abspath(inputdir, os.getcwd())
 
-        if 'rgnconfig' in self.results:
-            rgnconfig = self.results['rgnconfig']
+        if 'rgnconfig' in genrslt:
+            rgnconfig = genrslt['rgnconfig']
         else:
             stdout.write('[GlobalParamsComponent]: Using default region mapping (14 region)')
             rgnconfig = 'rgn14'
-        self.results['rgnconfig'] = util.abspath(rgnconfig, self.results['inputdir'])
+        genrslt['rgnconfig'] = util.abspath(rgnconfig, genrslt['inputdir'])
 
         return 0                # nothing to do here.
 
@@ -347,7 +426,7 @@ class GcamComponent(ComponentBase):
     def __init__(self, cap_tbl):
         """Add self to the capability table."""
         super(GcamComponent, self).__init__(cap_tbl)
-        cap_tbl["gcam-core"] = self
+        self.addcapability('gcam-core')
 
     def run_component(self):
         """Run the GCAM core model.
@@ -393,6 +472,10 @@ class GcamComponent(ComponentBase):
         # ensure consistency).
         dbxmlfpat = re.compile(r'<Value name="xmldb-location">(.*)</Value>')
         dbenabledpat = re.compile(r'<Value name="write-xml-db">(.*)</Value>')
+
+        # get a reference to the results that we will be exporting
+        gcamrslt = {}
+
         with open(cfg, "r") as cfgfile:
             # we don't need to parse the whole config file; all we
             # want is to locate the name of the output file make sure
@@ -409,13 +492,13 @@ class GcamComponent(ComponentBase):
             # The file spec is a relative path, starting from the
             # directory that contains the config file.
             dbxmlfile = os.path.join(self.workdir, dbxmlfile)
-            self.results["dbxml"] = dbxmlfile  # This is our eventual output
+            gcamrslt["dbxml"] = dbxmlfile  # This is our eventual output
             if os.path.exists(dbxmlfile):
                 if not self.clobber:
                     # This is not an error; it just means we can leave
                     # the existing output in place and return it.
                     print("GcamComponent:  results exist and no clobber.  Skipping.")
-                    self.results["changed"] = 0  # mark the cached results as clean
+                    gcamrslt["changed"] = 0  # mark the cached results as clean
                     return 0
                 else:
                     # have to remove the dbxml, or we will merely append to it
@@ -430,6 +513,9 @@ class GcamComponent(ComponentBase):
                             msgpfx + "Config file has dbxml input turned off.  Running GCAM would be futile.")
                     else:
                         break
+
+        # Add our output structure to the results dictionary.
+        self.addresults('gcam-core', gcamrslt)
 
         # now we're ready to actually do the run.  We don't check the return code; we let the run() method do that.
         print(f"Running:  {exe} -C{cfg} -L{logcfg}")
@@ -480,77 +566,6 @@ class XanthosComponent(ComponentBase):
         return 0
 
 
-class NetcdfDemoComponent(ComponentBase):
-    """Component to build NetCDF output for the February 2015 demo.
-
-    params:
-      mat2nc  - location of the netcdf converter executable
-        dsid  - dataset id
-     forcing  - forcing value (written into the output data as metadata)
-    globalpop - 2050 global population (written into output data as metadata)
-       pcGDP  - 2050 per-capita GDP (written into output data as metadata -- currently not used anyhow)
-    outfile - output file
-
-    Component dependences:  HydroComponent, WaterDisaggregationComponent
-
-    This component is specific to a particular demo and probably can't easily be adapted for any other
-    purpose.  In that sense, it's obsolete and should be considered deprecated.
-    """
-
-    def __init__(self, cap_tbl):
-        super(NetcdfDemoComponent, self).__init__(cap_tbl)
-        cap_tbl['netcdf-demo']=self
-
-    def run_component(self):
-        """Create NetCDF file from HydroComponent and WaterDisaggregationComponent results."""
-        hydro_rslts=self.cap_tbl['gcam-hydro'].fetch()
-        water_rslts=self.cap_tbl['water-disaggregation'].fetch()
-
-        print(f'water_rslts:\n{str(water_rslts)}')
-
-        chflow_file=hydro_rslts['cflxfile']
-        transfer=water_rslts['water-transfer']
-
-        rcp=self.params['rcp']
-        pop=self.params['pop']
-        gdp=10.0              # Dummy value; we didn't implement the GDP scenarios.
-        outfile=util.abspath(self.params['outfile'])
-        mat2nc=util.abspath(self.params['mat2nc'], os.getcwd())
-
-        self.results['outfile']=outfile
-
-        # ensure that the directory the output file is being written to exists
-        util.mkdir_if_noexist(os.path.dirname(outfile))
-
-        try:
-            # create a temporary file to hold the config
-            (fd, tempfilename)=tempfile.mkstemp()
-            cfgfile=os.fdopen(fd, "w")
-
-            cfgfile.write(f'{rcp}\n{pop}\n{gdp}\n')
-            cfgfile.write(f'{outfile}\n')
-            if transfer:
-                cfgfile.write('no-data\n')
-            else:
-                cfgfile.write(f'{chflow_file}\n')
-            for var in ['wdirr', 'wdliv', 'wdelec', 'wdmfg', 'wdtotal', 'wddom', 'wsi']:
-                if transfer:
-                    # for water transfer cases, we don't have any gridded data, so substitute a grid full of NaN.
-                    cfgfile.write('no-data\n')
-                else:
-                    cfgfile.write(f'{water_rslts[var]}\n')
-            cfgfile.write(f'{water_rslts["pop-demo"]}\n')
-            for var in ['basin-supply', 'basin-wdirr', 'basin-wdliv', 'basin-wdelec', 'basin-wdmfg', 'basin-wdtot', 'basin-wddom', 'basin-wsi',
-                        'rgn-supply', 'rgn-wdirr', 'rgn-wdliv', 'rgn-wdelec', 'rgn-wdmfg', 'rgn-wdtot', 'rgn-wddom', 'rgn-wsi']:
-                cfgfile.write(f'{water_rslts[var]}\n')
-
-            cfgfile.close()
-
-            return subprocess.call([mat2nc, tempfilename])
-        finally:
-            os.unlink(tempfilename)
-
-
 class DummyComponent(ComponentBase):
     """Dummy component for tests
 
@@ -572,7 +587,7 @@ class DummyComponent(ComponentBase):
     def __init__(self, cap_tbl, capability_out='dummy'):
         super(DummyComponent, self).__init__(cap_tbl)
         self.name = capability_out
-        cap_tbl[self.name] = self
+        self.addcapability(self.name)
 
     def run_component(self):
         """Run, request, delay, output."""
@@ -592,12 +607,18 @@ class DummyComponent(ComponentBase):
             sleep(delay / 1000.0)  # ms to s
 
             data.append((time() - st, f'Requesting data from {req}'))
-            self.cap_tbl[req].fetch()
+            self.fetch(req)
             data.append((time() - st, f'Recieved data from {req}'))
 
         sleep(finish_delay / 1000.0)
 
-        self.results['times'] = data
+        # Add our list of messages as the result for this capability
+        self.addresults(self.name, data)
+
         data.append((time() - st, f'Done {self.name}'))
 
         return 0
+
+    def report_test_results(self):
+        """Report the component's results to the unit testing code"""
+        return self.results[self.name]
