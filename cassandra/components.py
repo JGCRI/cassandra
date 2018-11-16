@@ -307,6 +307,10 @@ class ComponentBase(object):
         """Add data to the specified capability of this component."""
         if capability not in self.cap_tbl:
             raise CapabilityNotFound(capability)
+
+        if self.cap_tbl[capability] is not self:
+            raise RuntimeError(f'Component {self.__class__} does not own capability {capability}.')
+
         self.results[capability] = res
 
     def run_component(self):
