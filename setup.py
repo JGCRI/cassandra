@@ -26,6 +26,7 @@ setup(
     long_description=readme(),
     install_requires=get_requirements(),
     classifiers=[
-        "Programming Language :: Python :: 3"
+        "Programming Language :: Python :: 3.6"
+        "Programming Language :: Python :: 3.7"
     ]
 )
