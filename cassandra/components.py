@@ -51,8 +51,11 @@ import cassandra.util
 # This class is here to make it easy for a class to ignore failures to
 # find a particular capability in fetch() while still failing on any
 # other sort of error.
+
+
 class CapabilityNotFound(RuntimeError):
     pass
+
 
 class ComponentBase(object):
     """Common base class for all components (i.e., functional units) in the system.
@@ -243,8 +246,8 @@ class ComponentBase(object):
             return provider.fetch(capability)
 
         # If we get to here, then this is a request from another
-        # component for some data we are holding.  
-        
+        # component for some data we are holding.
+
         # If the component is currently running, then the condition
         # variable will be locked, and we will block when the 'with'
         # statement tries to obtain the lock.
@@ -355,7 +358,7 @@ class GlobalParamsComponent(ComponentBase):
 
         print('General parameters as input:')
         print(self.results)
-        
+
         # We need to allow gcamutil access to these parameters, since it doesn't otherwise know how to find the
         # global params component.  <- gross.  we need a better way to do this.
         util.global_params = self
@@ -453,7 +456,7 @@ class GcamComponent(ComponentBase):
 
         # get a reference to the results that we will be exporting
         gcamrslt = {}
-        
+
         with open(cfg, "r") as cfgfile:
             # we don't need to parse the whole config file; all we
             # want is to locate the name of the output file make sure
@@ -490,11 +493,11 @@ class GcamComponent(ComponentBase):
                         raise RuntimeError(
                             msgpfx + "Config file has dbxml input turned off.  Running GCAM would be futile.")
                     else:
-                        break 
+                        break
 
         # Add our output structure to the results dictionary.
         self.results['gcam-core'] = gcamrslt
-        
+
         # now we're ready to actually do the run.  We don't check the return code; we let the run() method do that.
         print(f"Running:  {exe} -C{cfg} -L{logcfg}")
 
@@ -503,7 +506,6 @@ class GcamComponent(ComponentBase):
         else:
             with open(logfile, "w") as lf:
                 return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf, cwd=self.workdir)
-
 
 
 class DummyComponent(ComponentBase):
@@ -561,4 +563,3 @@ class DummyComponent(ComponentBase):
     def report_test_results(self):
         """Report the component's results to the unit testing code"""
         return self.results[self.name]['times']
-    
