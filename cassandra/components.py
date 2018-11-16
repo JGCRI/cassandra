@@ -46,7 +46,7 @@ import threading
 import tempfile
 from sys import stdout
 from sys import stderr
-import cassandra.util
+from cassandra import util
 
 # This class is here to make it easy for a class to ignore failures to
 # find a particular capability in fetch() while still failing on any
@@ -84,17 +84,23 @@ class ComponentBase(object):
     run_component_wrapper(): used internally by run().  Don't monkey around
                              with this function.
 
-    fetch(): retrieve the component's results.  If the component hasn't
-             completed yet, wait to be notified of completion.  This
-             mechanism implicitly enforces correct ordering between
-             components.  Note that we don't make any checks for
-             deadlock caused by circular dependencies.
+    fetch(): retrieve the component's results for a single capability.
+             Takes a capability name as an argument.  If the capability
+             does not belong to this component, performs a lookup and
+             calls fetch() on the component that has the requested data.
+             If the component hasn't completed yet, wait to be notified
+             of completion.  This mechanism implicitly enforces correct
+             ordering between components.  Note that we don't make any
+             checks for deadlock caused by circular dependencies.
 
     addparam(): Add a key and value to the params array.  Generally
                 this should only be done in the config file parser.
 
-    addcapability(): Add a capability to the capability table and create
-                     a slot for it in the results dictionary.
+    addcapability(): Add a capability to the capability table.
+
+    addresults(): Update the results for a single capability. Use this
+                  rather than updating self.results directly, as this
+                  method ensures that the capability exists.
 
     Methods that can be extended (but not overridden; you must be sure
          to call the base method):
@@ -221,8 +227,9 @@ class ComponentBase(object):
         run_component() method failed, the variable will so indicate,
         and an exception will be raised.
 
-        Components should store their results in
-        self.results[capability-name], as that is where this method
+        Components should store their results by calling
+        self.addresults(capability-name, data), which adds the results
+        in the self.results dictionary, which is where this method
         will look for them.  The system levies no particular
         requirements on the format of data returned, so components
         should publish a complete description of their data in their
@@ -291,19 +298,26 @@ class ComponentBase(object):
         self.params[key] = value
 
     def addcapability(self, capability):
+        """Add a capability to the capability table."""
         if capability in self.cap_tbl:
             raise RuntimeError(f'Duplicate definition of capability {capability}.')
         self.cap_tbl[capability] = self
 
+    def addresults(self, capability, res):
+        """Add data to the specified capability of this component."""
+        if capability not in self.cap_tbl:
+            raise CapabilityNotFound(capability)
+        self.results[capability] = res
+
     def run_component(self):
         """Subclasses of ComponentBase are required to override this method.
 
-        Components' implementations of this method should place
-        results of their calculations in
-        self.results[<capability-name>], where capability-name is the
-        name of the capability being provided.  A component can
-        provide multiple capabilities, with each one getting its own
-        entry in the results dictionary.
+        Components' implementations of this method should add the
+        results of their calculations to the self.results dictionary
+        by calling self.addresults(<capability-name>, data), where
+        capability-name is the name of the capability being provided.
+        A component can provide multiple capabilities, with each one
+        getting its own entry in the results dictionary.
         """
 
         raise NotImplementedError("ComponentBase is not a runnable class.")
@@ -353,11 +367,12 @@ class GlobalParamsComponent(ComponentBase):
         super(GlobalParamsComponent, self).__init__(cap_tbl)
 
         self.addcapability('general')
-        self.results['general'] = self.params  # this is a reference copy, so any entries added to
-        # params will also appear in results.
+
+        # this is a reference copy, so any entries added to params will also appear in results.
+        self.addresults('general', self.params)
 
         print('General parameters as input:')
-        print(self.results)
+        print(self.results['general'])
 
         # We need to allow gcamutil access to these parameters, since it doesn't otherwise know how to find the
         # global params component.  <- gross.  we need a better way to do this.
@@ -366,8 +381,8 @@ class GlobalParamsComponent(ComponentBase):
     def run_component(self):
         """Set the default value for the optional parameters, and convert filenames to absolute paths."""
         genrslt = self.results['general']
-        genrslt['ModelInterface'] = util.abspath(self.results['ModelInterface'])
-        genrslt['DBXMLlib'] = util.abspath(self.results['DBXMLlib'])
+        genrslt['ModelInterface'] = util.abspath(self.results['general']['ModelInterface'])
+        genrslt['DBXMLlib'] = util.abspath(self.results['general']['DBXMLlib'])
 
         if 'inputdir' in genrslt:
             inputdir = genrslt['inputdir']
@@ -496,7 +511,7 @@ class GcamComponent(ComponentBase):
                         break
 
         # Add our output structure to the results dictionary.
-        self.results['gcam-core'] = gcamrslt
+        self.addresults('gcam-core', gcamrslt)
 
         # now we're ready to actually do the run.  We don't check the return code; we let the run() method do that.
         print(f"Running:  {exe} -C{cfg} -L{logcfg}")
@@ -554,12 +569,13 @@ class DummyComponent(ComponentBase):
 
         sleep(finish_delay / 1000.0)
 
-        self.results[self.name] = {}
-        self.results[self.name]['times'] = data
+        # Add our list of messages as the result for this capability
+        self.addresults(self.name, data)
+
         data.append((time() - st, f'Done {self.name}'))
 
         return 0
 
     def report_test_results(self):
         """Report the component's results to the unit testing code"""
-        return self.results[self.name]['times']
+        return self.results[self.name]
