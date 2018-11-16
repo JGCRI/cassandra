@@ -38,7 +38,7 @@ class TestBlocking(unittest.TestCase):
         self.confirmSuccess()
 
         # The last time in the results' times list is the completion time
-        finish_times = [c.results['times'][-1][0] for c in self.component_list]
+        finish_times = [c.report_test_results()[-1][0] for c in self.component_list]
 
         # Round to the nearest second for comparison
         finish_seconds = [round(ft) for ft in finish_times]
@@ -61,7 +61,7 @@ class TestBlocking(unittest.TestCase):
         self.confirmSuccess()
 
         # Calculate the ms it took to ran the first component
-        d1_time = self.d1.results['times'][-1][0]
+        d1_time = self.d1.report_test_results()[-1][0]
         d1_ms = round(d1_time, 1) * 1000
 
         # Should have had to wait for each component to finish; the only delay

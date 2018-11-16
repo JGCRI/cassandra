@@ -12,6 +12,10 @@ ComponentBase         - Base class for all components.  Provides the
                         interface, as well as services like managing
                         threads, locks, and condition variables.
 
+CapabilityNotFound    - Exception class raised when a component requests
+                        a capability that is not provided by any
+                        component in the system.
+
 GlobalParamsComponent - Store parameters common to all components.
 
 GcamComponent         - Run the GCAM core model.
@@ -42,7 +46,15 @@ import threading
 import tempfile
 from sys import stdout
 from sys import stderr
-import cassandra.util
+from cassandra import util
+
+# This class is here to make it easy for a class to ignore failures to
+# find a particular capability in fetch() while still failing on any
+# other sort of error.
+
+
+class CapabilityNotFound(RuntimeError):
+    pass
 
 
 class ComponentBase(object):
@@ -72,14 +84,23 @@ class ComponentBase(object):
     run_component_wrapper(): used internally by run().  Don't monkey around
                              with this function.
 
-    fetch(): retrieve the component's results.  If the component hasn't
-             completed yet, wait to be notified of completion.  This
-             mechanism implicitly enforces correct ordering between
-             components.  Note that we don't make any checks for
-             deadlock caused by circular dependencies.
+    fetch(): retrieve the component's results for a single capability.
+             Takes a capability name as an argument.  If the capability
+             does not belong to this component, performs a lookup and
+             calls fetch() on the component that has the requested data.
+             If the component hasn't completed yet, wait to be notified
+             of completion.  This mechanism implicitly enforces correct
+             ordering between components.  Note that we don't make any
+             checks for deadlock caused by circular dependencies.
 
     addparam(): Add a key and value to the params array.  Generally
                 this should only be done in the config file parser.
+
+    addcapability(): Add a capability to the capability table.
+
+    addresults(): Update the results for a single capability. Use this
+                  rather than updating self.results directly, as this
+                  method ensures that the capability exists.
 
     Methods that can be extended (but not overridden; you must be sure
          to call the base method):
@@ -137,7 +158,6 @@ class ComponentBase(object):
         self.status = 0         # status indicator: 0- not yet run, 1- complete, 2- error
         self.results = {}
         self.params = {}
-        self.results["changed"] = 1
         self.cap_tbl = cap_tbl  # store a reference to the capability lookup table
         self.condition = threading.Condition()
 
@@ -190,17 +210,50 @@ class ComponentBase(object):
                 self.condition.notify_all()      # release any waiting threads
         # end of with block:  lock on condition var released.
 
-    def fetch(self):
-        """Return the results of the calculation as a dictionary.
+    def fetch(self, capability):
+        """Return the data associated with the named capability.
 
-        The results aren't returned from run() because it will run
-        asynchronously.  This method waits if necessary and returns
-        the results, checks whether the run was successful (indicated
-        by self.status), and if so returns the results dictionary.  If
-        the run_component() method failed, the variable will so indicate, and
-        an exception will be raised.
+        Components don't return results from run() because it will run
+        asynchronously.  Instead, if you want the results associated
+        with a particular capability, you call this method with the
+        name of the capability.  If the capability does not exist in
+        the system, a CapabilityNotFound exception will be thrown.
+
+        Internally, this method first looks up the component that has
+        the requested data and forwards the request to that
+        component's fetch method.  That call waits if necessary, then
+        checks whether the run was successful (indicated by
+        self.status), and if so returns the requested data.  If the
+        run_component() method failed, the variable will so indicate,
+        and an exception will be raised.
+
+        Components should store their results by calling
+        self.addresults(capability-name, data), which adds the results
+        in the self.results dictionary, which is where this method
+        will look for them.  The system levies no particular
+        requirements on the format of data returned, so components
+        should publish a complete description of their data in their
+        documentation.
+
+        WARNING: if a component tries to fetch a capability that it,
+        itself, provides, this will lead to instant deadlock.  So,
+        don't do that.
 
         """
+
+        try:
+            provider = self.cap_tbl[capability]
+        except KeyError:
+            raise CapabilityNotFound(capability)
+
+        if self is not provider:
+            # This is a request (presumably originating in our own run
+            # method) for a capability in another component.  Forward
+            # it to that component.
+            return provider.fetch(capability)
+
+        # If we get to here, then this is a request from another
+        # component for some data we are holding.
 
         # If the component is currently running, then the condition
         # variable will be locked, and we will block when the 'with'
@@ -216,7 +269,7 @@ class ComponentBase(object):
         if self.status != 1:
             raise RuntimeError(f"{self.__class__}: wait() returned with non-success status!")
 
-        return self.results
+        return self.results[capability]
 
     def finalize_parsing(self):
         """Process parameters that are common to all components (e.g. clobber).
@@ -244,8 +297,32 @@ class ComponentBase(object):
 
         self.params[key] = value
 
+    def addcapability(self, capability):
+        """Add a capability to the capability table."""
+        if capability in self.cap_tbl:
+            raise RuntimeError(f'Duplicate definition of capability {capability}.')
+        self.cap_tbl[capability] = self
+
+    def addresults(self, capability, res):
+        """Add data to the specified capability of this component."""
+        if capability not in self.cap_tbl:
+            raise CapabilityNotFound(capability)
+
+        if self.cap_tbl[capability] is not self:
+            raise RuntimeError(f'Component {self.__class__} does not own capability {capability}.')
+
+        self.results[capability] = res
+
     def run_component(self):
-        """Subclasses of ComponentBase are required to override this method."""
+        """Subclasses of ComponentBase are required to override this method.
+
+        Components' implementations of this method should add the
+        results of their calculations to the self.results dictionary
+        by calling self.addresults(<capability-name>, data), where
+        capability-name is the name of the capability being provided.
+        A component can provide multiple capabilities, with each one
+        getting its own entry in the results dictionary.
+        """
 
         raise NotImplementedError("ComponentBase is not a runnable class.")
 
@@ -293,34 +370,36 @@ class GlobalParamsComponent(ComponentBase):
         """
         super(GlobalParamsComponent, self).__init__(cap_tbl)
 
-        self.results = self.params  # this is a reference copy, so any entries added to
-        # params will also appear in results.
+        self.addcapability('general')
+
+        # this is a reference copy, so any entries added to params will also appear in results.
+        self.addresults('general', self.params)
 
         print('General parameters as input:')
-        print(self.results)
-        cap_tbl["general"] = self
+        print(self.results['general'])
 
         # We need to allow gcamutil access to these parameters, since it doesn't otherwise know how to find the
-        # global params component.
+        # global params component.  <- gross.  we need a better way to do this.
         util.global_params = self
 
     def run_component(self):
         """Set the default value for the optional parameters, and convert filenames to absolute paths."""
-        self.results['ModelInterface'] = util.abspath(self.results['ModelInterface'])
-        self.results['DBXMLlib'] = util.abspath(self.results['DBXMLlib'])
+        genrslt = self.results['general']
+        genrslt['ModelInterface'] = util.abspath(self.results['general']['ModelInterface'])
+        genrslt['DBXMLlib'] = util.abspath(self.results['general']['DBXMLlib'])
 
-        if 'inputdir' in self.results:
-            inputdir = self.results['inputdir']
+        if 'inputdir' in genrslt:
+            inputdir = genrslt['inputdir']
         else:
             inputdir = './input-data'
-        self.results['inputdir'] = util.abspath(inputdir, os.getcwd())
+        genrslt['inputdir'] = util.abspath(inputdir, os.getcwd())
 
-        if 'rgnconfig' in self.results:
-            rgnconfig = self.results['rgnconfig']
+        if 'rgnconfig' in genrslt:
+            rgnconfig = genrslt['rgnconfig']
         else:
             stdout.write('[GlobalParamsComponent]: Using default region mapping (14 region)')
             rgnconfig = 'rgn14'
-        self.results['rgnconfig'] = util.abspath(rgnconfig, self.results['inputdir'])
+        genrslt['rgnconfig'] = util.abspath(rgnconfig, genrslt['inputdir'])
 
         return 0                # nothing to do here.
 
@@ -347,7 +426,7 @@ class GcamComponent(ComponentBase):
     def __init__(self, cap_tbl):
         """Add self to the capability table."""
         super(GcamComponent, self).__init__(cap_tbl)
-        cap_tbl["gcam-core"] = self
+        self.addcapability('gcam-core')
 
     def run_component(self):
         """Run the GCAM core model.
@@ -393,6 +472,10 @@ class GcamComponent(ComponentBase):
         # ensure consistency).
         dbxmlfpat = re.compile(r'<Value name="xmldb-location">(.*)</Value>')
         dbenabledpat = re.compile(r'<Value name="write-xml-db">(.*)</Value>')
+
+        # get a reference to the results that we will be exporting
+        gcamrslt = {}
+
         with open(cfg, "r") as cfgfile:
             # we don't need to parse the whole config file; all we
             # want is to locate the name of the output file make sure
@@ -409,13 +492,13 @@ class GcamComponent(ComponentBase):
             # The file spec is a relative path, starting from the
             # directory that contains the config file.
             dbxmlfile = os.path.join(self.workdir, dbxmlfile)
-            self.results["dbxml"] = dbxmlfile  # This is our eventual output
+            gcamrslt["dbxml"] = dbxmlfile  # This is our eventual output
             if os.path.exists(dbxmlfile):
                 if not self.clobber:
                     # This is not an error; it just means we can leave
                     # the existing output in place and return it.
                     print("GcamComponent:  results exist and no clobber.  Skipping.")
-                    self.results["changed"] = 0  # mark the cached results as clean
+                    gcamrslt["changed"] = 0  # mark the cached results as clean
                     return 0
                 else:
                     # have to remove the dbxml, or we will merely append to it
@@ -431,6 +514,9 @@ class GcamComponent(ComponentBase):
                     else:
                         break
 
+        # Add our output structure to the results dictionary.
+        self.addresults('gcam-core', gcamrslt)
+
         # now we're ready to actually do the run.  We don't check the return code; we let the run() method do that.
         print(f"Running:  {exe} -C{cfg} -L{logcfg}")
 
@@ -439,656 +525,6 @@ class GcamComponent(ComponentBase):
         else:
             with open(logfile, "w") as lf:
                 return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf, cwd=self.workdir)
-
-# class for the hydrology code
-
-# This is how you run the hydrology code from the command line:
-# matlab -nodisplay -nosplash -nodesktop -r "run_future_hydro('<gcm>','<scenario>');exit" > & outputs/pcm-a1-out.txt < /dev/null
-
-
-class HydroComponent(ComponentBase):
-    """Provide the 'gcam-hydro' capability.
-
-    This is the future hydrology calculation.  For the historical
-    hydrology calculation, see HistoricalHydroComponent.
-
-     params:
-       workdir - working directory
-      inputdir - input directory
-     outputdir - output directory
-           gcm - GCM outputs to use
-      scenario - tag indicating the scenario to use.
-         runid - tag indicating which ensemble member to use.
-       logfile - file to direct the matlab code's output to
-     startmonth- month of year for first month in dataset. 1=Jan, 2=Feb, etc.  (OPTIONAL)
-    init-storage-file - Location of the file containing initial channel storage. Not
-                        required (and ignored) if HistoricalHydroComponent is present
-
-     results:
-       qoutfile - runoff grid (matlab format)
-       foutfile - stream flow grid (matlab)
-         cqfile - runoff grid (c format)
-       cflxfile - stream flow grid (c format)
-     basinqfile - basin level runoff (matlab format)
-    cbasinqfile - basin level runoff (c format)
-      basinqtbl - basin level output (csv format)
-       rgnqfile - region level runoff (matlab format)
-      crgnqfile - region level runoff (c format)
-        rgnqtbl - region level runoff (csv format)
-     petoutfile - PET grid (matlab format)
-
-    Component dependences: HistoricalHydroComponent (optional)
-
-    """
-
-    def __init__(self, cap_tbl):
-        """Add self to the capability table."""
-        super(HydroComponent, self).__init__(cap_tbl)
-        cap_tbl["gcam-hydro"] = self
-
-    def run_component(self):
-        """Run the future hydrology component.
-
-        This component identifies the correct input files using the gcm,
-        scenario, and runid tags and checks to see if those files are
-        present.  If not, then it throws an IOError exception.  If the
-        inputs are present, then it calculates the expected outputs
-        and checks to see if they are present.  If they are, then
-        uless the 'clobber' parameter is set, the calculation is
-        skipped.  Otherwise the hydrology calculation is run on the
-        future dataset.  The return value is 0 for successful
-        completion, 1 otherwise.
-
-        The future hydrology calculation expects an input file with
-        the initial channel water storage.  If the historical
-        hydrology model is in use, then the initial channel storage
-        will be taken from those results.  Otherwise, the initial
-        channel flow values must be taken from the file supplied as
-        the 'init-storage-file' parameter.
-
-        """
-
-        workdir = util.abspath(self.params["workdir"])
-        inputdir = util.abspath(self.params["inputdir"])  # input data from GCM
-        outputdir = util.abspath(self.params["outputdir"])  # destination for output files
-        gcm = self.params["gcm"]
-        scenario = self.params["scenario"]
-        runid = self.params["runid"]  # identifier for the GCM ensemble member
-        logfile = util.abspath(self.params["logfile"])
-        try:
-            startmonth = int(self.params['startmonth'])
-        except KeyError:
-            startmonth = 1      # Default is to start at the beginning of the year
-        print(f'[HydroComponent]: start month = {startmonth}')
-
-        # ensure that output directory exists
-        util.mkdir_if_noexist(outputdir)
-
-        # get initial channel storage from historical hydrology
-        # component if available, or from self-parameters if not
-        if 'historical-hydro' in self.cap_tbl:
-            hist_rslts = self.cap_tbl['historical-hydro'].fetch()
-            initstorage = hist_rslts['chstorfile']
-            self.results['hist-fout'] = hist_rslts['foutfile']
-            self.results['hist-qout'] = hist_rslts['qoutfile']
-        else:
-            # matlab data file containing initial storage -- used
-            # only if no historical hydro component.
-            initstorage = util.abspath(self.params["init-storage-file"])
-            self.results['hist-fout'] = '/dev/null'
-            self.results['hist-qout'] = '/dev/null'
-
-        if inputdir[-1] != '/':
-            inputdir = inputdir + '/'
-        if outputdir[-1] != '/':
-            outputdir = outputdir + '/'
-
-        # we need to check existence of input and output files
-        prefile = inputdir + 'pr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
-        tempfile = inputdir + 'tas_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
-        dtrfile = inputdir + 'dtr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
-
-        print(f"input files:\n\t{prefile}\n\t{tempfile}\n\t{dtrfile}")
-
-        msgpfx = "HydroComponent:  "
-        if not os.path.exists(prefile):
-            raise IOError(msgpfx + "missing input file: " + prefile)
-        if not os.path.exists(tempfile):
-            raise IOError(msgpfx + "missing input file: " + tempfile)
-        if not os.path.exists(dtrfile):
-            raise IOError(msgpfx + "missing input file: " + dtrfile)
-
-        # filename bases
-        qoutbase = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid
-        foutbase = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid
-        boutbase = outputdir + 'basin_runoff_235_' + gcm + '_' + scenario + '_' + runid
-        routbase = outputdir + 'rgn_runoff_235_'+gcm+'_' + scenario + '_' + runid
-        petoutbase = outputdir + 'Avg_PET_235_' + gcm + '_' + scenario + '_' + runid
-
-        # matlab files for future processing steps
-        qoutfile = qoutbase + '.mat'
-        foutfile = foutbase + '.mat'
-        basinqfile = boutbase + '.mat'
-        rgnqfile = routbase + '.mat'
-        petoutfile = petoutbase + '.mat'
-        # c-data files for final output
-        cqfile = qoutbase + '.dat'
-        cflxfile = foutbase + '.dat'
-        cbasinqfile = boutbase + '.dat'
-        crgnqfile = routbase + '.dat'
-        # csv tables for diagnostics
-        basinqtblfile = boutbase + '.csv'
-        rgnqtblfile = routbase + '.csv'
-
-        # Our result is the location of these output files.  Set that
-        # now, even though the files won't be created until we're
-        # done running.
-        self.results['qoutfile'] = qoutfile
-        self.results['foutfile'] = foutfile
-        self.results['cqfile'] = cqfile
-        self.results['cflxfile'] = cflxfile
-        self.results['basinqfile'] = basinqfile
-        self.results['cbasinqfile'] = cbasinqfile
-        self.results['rgnqfile'] = rgnqfile
-        self.results['crgnqfile'] = crgnqfile
-        self.results['basinqtbl'] = basinqtblfile
-        self.results['rgnqtbl'] = rgnqtblfile
-        self.results['petoutfile'] = petoutfile
-
-        # We need to report the runid so that other components that use
-        # this output can name their files correctly.
-        self.results['runid'] = runid
-
-        alloutfiles = [qoutfile, foutfile, cqfile, cflxfile, basinqfile, cbasinqfile,
-                       rgnqfile, crgnqfile, basinqtblfile, rgnqtblfile, petoutfile]
-        if not self.clobber and util.allexist(alloutfiles):
-            # all files exist, and we don't want to clobber them
-            print("[HydroComponent]:  results exist and no clobber.  Skipping.")
-            self.results["changed"] = 0  # mark cached results as clean
-            return 0        # success code
-
-        # Get the location of the region mapping file.
-        genparams = self.cap_tbl['general'].fetch()
-        gridrgn = util.abspath('grid2rgn_nonag.csv', genparams['rgnconfig'])
-
-        # Run the matlab code.
-        # TODO: eventually we need to move away from matlab, as it is not a
-        # suitable batch language.  Notably, if it encounters an error
-        # it will stop at a command prompt instead of exiting with an
-        # error code.  Yuck.
-
-        # Note that unlike the historical version, we don't have to
-        # pass the names of the basin and region table files, since
-        # the code can infer them from the basinqfile and rgnqfile
-        # parameters.
-        # TODO: prune the number of filenames passed by inferring all
-        # of the cfoofile filenames the same way.
-        print('Running the matlab hydrology code')
-        with open(logfile, "w") as logdata, open("/dev/null", "r") as null:
-            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread', '-r',
-                       f"run_future_hydro('{prefile}', '{tempfile}', '{dtrfile}', '{initstorage}', '{gridrgn}', '{startmonth}', '{qoutfile}', '{foutfile}', '{petoutfile}', '{basinqfile}', '{rgnqfile}', '/dev/null');exit"]
-            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
-                                  cwd=workdir)
-            rc = sp.wait()
-        # matlab often won't return an error code when it fails, so check to see that all files were created
-        if util.allexist(alloutfiles):
-            return rc
-        else:
-            stderr.write(f'[HydroComponent]: Some output files missing.  Check logfile ({logfile}) for more information\n')
-            return 1            # nonzero return code indicates failure
-    # end of run_component()
-
-
-class HistoricalHydroComponent(ComponentBase):
-    """Class for historical hydrology run.
-
-    This is similar to, but not quite the same as, the main hydro component.
-    params:
-       workdir  - working directory for the matlab runs
-       inputdir - location of the input files
-        gcm     - Which GCM to use (each has its own historical data)
-       runid    - Tag indicating the run-id (e.g.  r1i1p1_195001_200512 )
-       outputdir- Destination directory for output
-       logfile  - file to redirect matlab output to
-      startmonth- month of year for first month in dataset (OPTIONAL)
-
-    results:
-         qoutfile - runoff grid (matlab format)
-         foutfile - stream flow grid (matlab format)
-       chstorfile - channel storage grid (matlab format)
-        basinqtbl - file for basin level runoff (csv format)
-          rgnqtbl - file for region level runoff (csv format)
-       petoutfile - file for PET output (matlab format)
-
-    component dependences:  none
-
-    """
-
-    def __init__(self, cap_tbl):
-        """Add 'historical-hydro' capability to cap_tbl"""
-        super(HistoricalHydroComponent, self).__init__(cap_tbl)
-        cap_tbl['historical-hydro'] = self
-
-    def run_component(self):
-        """Run the historical hydrology code.
-
-        Before running, the component tests for the existence of the
-        input files, and throws an exception (IOError) if any are
-        missing.  It also tests for the expected output files, and if
-        they are all present and 'clobber' is not set, it skips the
-        run.  Either way, the results dictionary contains the names of
-        the output files.  Return value is 0 for success, 1 for
-        failure.
-
-        """
-        workdir = util.abspath(self.params['workdir'])
-        inputdir = util.abspath(self.params['inputdir'])
-        outputdir = util.abspath(self.params['outputdir'])
-        gcm = self.params['gcm']
-        scenario = 'historical'
-        runid = self.params['runid']
-        logfile = util.abspath(self.params['logfile'])
-        try:
-            startmonth = int(self.params['startmonth'])
-        except KeyError:
-            startmonth = 1      # Default is January
-        print(f'[HistoricalHydroComponent]: start month = {startmonth}')
-
-        # ensure output directory exists
-        util.mkdir_if_noexist(outputdir)
-
-        if inputdir[-1] != '/':
-            inputdir = inputdir + '/'
-        if outputdir[-1] != '/':
-            outputdir = outputdir + '/'
-
-        # we need to check existence of input and output files
-        prefile = inputdir + 'pr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
-        tempfile = inputdir + 'tas_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
-        dtrfile = inputdir + 'dtr_Amon_' + gcm + '_' + scenario + '_' + runid + '.mat'
-
-        print(f"input files:\n\t{prefile}\n\t{tempfile}\n\t{dtrfile}")
-
-        msgpfx = "HistoricalHydroComponent:  "
-        if not os.path.exists(prefile):
-            raise IOError(msgpfx + "missing input file: " + prefile)
-        if not os.path.exists(tempfile):
-            raise IOError(msgpfx + "missing input file: " + tempfile)
-        if not os.path.exists(dtrfile):
-            raise IOError(msgpfx + "missing input file: " + dtrfile)
-
-        # output filenames
-        qoutfile = outputdir + 'Avg_Runoff_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
-        petoutfile = outputdir + 'Avg_PET_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
-        basinqtblfile = outputdir + 'basin_runoff_235_' + gcm + '_' + scenario + '_' + runid + '.csv'
-        rgnqtblfile = outputdir + 'rgn_runoff_235_' + gcm + '_' + scenario + '_' + runid + '.csv'
-        foutfile = outputdir + 'Avg_ChFlow_235_' + gcm + '_' + scenario + '_' + runid + '.mat'
-        chstorfile = outputdir + 'InitChStor_' + gcm + '_' + scenario + '_' + runid + '.mat'
-
-        # Results will be these file names.  Set up the results
-        # entries now, even though the files won't be ready yet.
-        self.results['qoutfile'] = qoutfile
-        self.results['foutfile'] = foutfile
-        self.results['chstorfile'] = chstorfile
-        self.results['basinqtbl'] = basinqtblfile
-        self.results['rgnqtbl'] = rgnqtblfile
-        self.results['petoutfile'] = petoutfile
-
-        # Test to see if the outputs already exist.  If so, then we can skip these calcs.
-        alloutfiles = [qoutfile, foutfile, petoutfile, chstorfile, basinqtblfile, rgnqtblfile]
-        if not self.clobber and util.allexist(alloutfiles):
-            print("[HistoricalHydroComponent]: results exist and no clobber set.  Skipping.")
-            self.results['changed'] = 0
-            return 0        # success code
-
-        # Get the location of the region mapping file.
-        genparams = self.cap_tbl['general'].fetch()
-        gridrgn = util.abspath('grid2rgn_nonag.csv', genparams['rgnconfig'], 'HistoricalHydroComponent')
-        print(f'[HistoricalHydroComponent]: gridrgn = {gridrgn} ')
-        print(f'[HistoricalHydroComponent]: rgnconfig = {genparams["rgnconfig"]} ')
-
-        # If we get here, then we need to run the historical
-        # hydrology.  Same comments apply as to the regular hydrology
-        # component.
-        print(f'Running historical hydrology for gcm= {gcm}   runid= {runid}')
-        with open(logfile, 'w') as logdata, open('/dev/null', 'r') as null:
-            arglist = ['matlab', '-nodisplay', '-nosplash', '-nodesktop', '-singleCompThread', '-r',
-                       f"run_future_hydro('{prefile}', '{tempfile}', '{dtrfile}', '{gridrgn}', '{1}', '{chstorfile}', '{qoutfile}', '{foutfile}', '{petoutfile}', '{basinqfile}', '{rgnqtblfile}', '/dev/null');exit"]
-            sp = subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
-                                  cwd=workdir)
-            rc = sp.wait()
-        # check to see if the outputs were actually created; matlab will sometimes fail silently
-        if util.allexist(alloutfiles):
-            return rc
-        else:
-            stderr.write(
-                f'[HistoricalHydroComponent]: Some output files were not created.  Check logfile ({logfile}) for details.\n')
-            return 1            # nonzero indicates failure
-
-# This is how you run the disaggregation code
-# matlab -nodisplay -nosplash -nodesktop -r "run_disaggregation('<runoff-file>', '<chflow-file>', '<gcam-filestem>');exit" >& <logfile> < /dev/null
-
-
-class WaterDisaggregationComponent(ComponentBase):
-    """Class for the water demand disaggregation calculation
-
-    This component makes use of the GCAMhydro code (which currently
-    includes the water disaggregation code). That code lives in its
-    own repository and must be installed independently.  Some input
-    files for this component will live in the GCAMhydro input directory,
-    while others will live in the gcam-driver inputs.  Mostly, things
-    that GCAMhydro knows about go in the GCAMhydro directories, while
-    other stuff goes in our directories.  One major exception is all
-    of the region-related data (including the grid-to-region mapping.
-    That data is in the driver repository (by default - it can be
-    changed) so that we can keep the region mapping consistent between
-    components.
-
-    params:
-       workdir  - working directory (location of GCAMhydro code)
-
-     outputdir  - directory for outputs
-
-       tempdir  - directory for intermediate files (results of GCAM queries)
-
-       logfile  - File to redirect matlab output into.
-
-      scenario  - scenario tag
-
-          inputdir - directory for static inputs.  (OPTIONAL - default =
-                     inputdir from GlobalParamsComponent)
-
-    water-transfer - Flag indicating whether water transfer projects
-                     should be added in post processing (OPTIONAL -
-                     default = False)
-
-    transfer-file - Location of the file describing the water
-                     transfers.  Required if water-transfer == True,
-                     ignored otherwise.  Location for relative paths
-                     is workdir (so 'inputs/water-transfer.csv' will
-                     put it in the inputs directory for GCAMhydro)
-
-    results: c-style binary files for each of the following variables
-              (the key is the variable name; the value is the
-              filename): "wdtotal", "wddom", "wdelec", "wdirr",
-              "wdliv", "wdmanuf", "wdmining", "wsi"
-
-    Component dependences:  GcamComponent, HydroComponent
-
-    TODO: Allow config to specify a GCAM dbxml file directly, instead
-          of having to go through the GcamComponent, even when we know
-          the result is precalculated.
-
-    """
-
-    def __init__(self, cap_tbl):
-        super(WaterDisaggregationComponent, self).__init__(cap_tbl)
-        cap_tbl["water-disaggregation"]=self
-
-    def run_component(self):
-        """Run the water demand disaggregation calculation.
-
-        Does some simple consistency checking on the input parameters,
-        and returns a failure code if errors are found.  Then checks
-        to see if expected outputs already exist.  If so, the
-        calculation is skipped (unless 'clobber' is set), and the
-        existing results are added to the results dictionary.
-        Otherwise, the disaggregation calculation is run, and the new
-        results are added to the results dictionary.
-
-        """
-
-        import water.waterdisag as waterdisag
-
-        workdir=self.params["workdir"]
-
-        hydro_rslts=self.cap_tbl["gcam-hydro"].fetch()  # hydrology component
-        genparams=self.cap_tbl['general'].fetch()   # general parameters
-
-        if 'dbxml' in self.params:
-            if 'gcam-core' in self.cap_tbl:
-                stdout.write(
-                    '[WaterDisaggregationComponent]: WARNING - gcam component included and dbfile specified.  Using dbfile and ignoring component.\n')
-            gcam_rslts={'dbxml': self.params['dbxml'],
-                          'changed': False}
-        else:
-            gcam_rslts=self.cap_tbl["gcam-core"].fetch()  # gcam core component
-
-        runoff_file=hydro_rslts["qoutfile"]
-        chflow_file=hydro_rslts["foutfile"]
-        basinqfile=hydro_rslts["basinqfile"]
-        rgnqfile=hydro_rslts["rgnqfile"]
-        runid=hydro_rslts["runid"]
-        dbxmlfile=util.abspath(gcam_rslts["dbxml"])
-        outputdir=util.abspath(self.params["outputdir"])
-        tempdir=util.abspath(self.params["tempdir"])  # location for intermediate files produced by dbxml queries
-        scenariotag=self.params["scenario"]
-        hist_chflow_file=hydro_rslts['hist-fout']
-        hist_runoff_file=hydro_rslts['hist-qout']
-
-        rgnconfig=genparams['rgnconfig']
-
-        # ensure that output and temp directories exist
-        util.mkdir_if_noexist(outputdir)
-        util.mkdir_if_noexist(tempdir)
-
-        if 'inputdir' in self.params:
-            inputdir=self.params['inputdir']  # static inputs, such as irrigation share and query files.
-        else:
-            inputdir=genparams['inputdir']
-        print(f'[WaterDisaggregationComponent]: inputdir = {inputdir}')
-
-        # Parse the water transfer parameters.
-        if 'water-transfer' in self.params:
-            transfer=util.parseTFstring(self.params['water-transfer'])
-            try:
-                transfer_file=util.abspath(self.params['transfer-file'], workdir)
-            except KeyError:
-                stderr.write('Water transfer set, but no transfer data file specified.\n')
-                return 5
-        else:
-            transfer=False
-            transfer_file='/dev/null'  # won't be used by the matlab program, but we still need a placeholder
-
-        if 'power-plant-data' in self.params:
-            ppinfile=self.params['power-plant-data']
-            wfcoal=self.params.get('waterfac-coal')  # get() suplies None as a default value
-            wfgas=self.params.get('waterfac-gas')
-            wfnuc=self.params.get('waterfac-nuc')
-
-            ppgrid_data=waterdisag.pplant_proc(ppinfile, tempdir, wfcoal, wfgas, wfnuc)
-            ppflag=1
-        else:
-            ppgrid_data='/dev/null'  # matlab prog will detect and use fallback.
-            ppflag=0
-
-        self.results['water-transfer']=transfer
-        # append the transfer status to the scenario tag
-        if transfer:
-            scenariotag=scenariotag + 'wT'
-        else:
-            scenariotag=scenariotag + 'wF'
-        print(f'scenariotag = {scenariotag}')
-
-        # Initialize the waterdisag component
-        waterdisag.init_rgn_tables(rgnconfig)
-
-        # Helper function generator
-        def get_dir_prepender(dir):
-            if dir[-1] == '/':
-                return lambda file: dir+file
-            else:
-                return lambda file: dir+'/'+file
-
-        inputdirprep=get_dir_prepender(inputdir)
-        tempdirprep=get_dir_prepender(tempdir)
-        outdirprep=get_dir_prepender(outputdir)
-        rgndirprep=get_dir_prepender(rgnconfig)
-
-        vars=["wdtotal", "wddom", "wdelec", "wdirr", "wdliv", "wdmfg", "wdmin", "wsi",
-                "basin-supply", "basin-wdtot", "basin-wddom", "basin-wdelec", "basin-wdirr", "basin-wdliv", "basin-wdmfg", "basin-wdmin", "basin-wsi",
-                "rgn-supply", "rgn-wdtot", "rgn-wddom", "rgn-wdelec", "rgn-wdirr", "rgn-wdliv", "rgn-wdmfg", "rgn-wdmin", "rgn-wsi"]
-        allfiles=1
-        for var in vars:
-            filename=f"{outputdir}/{var}-{scenariotag}-{runid}.dat"
-            self.results[var]=filename
-            if not os.path.exists(filename):
-                print(f'File {filename} does not exist.  Running WaterDisaggregationComponent.\n')
-                allfiles=0
-
-        pop_demo_file=outdirprep("pop-demo.csv")  # changed this to use the same region ordering in the water data.
-        self.results['pop-demo']=pop_demo_file
-
-        if allfiles and not self.clobber and not (gcam_rslts["changed"] or hydro_rslts["changed"]):
-            print("WaterDisaggregationComponent: results exist and no clobber.  Skipping.")
-            self.results["changed"]=0
-            return 0
-
-        print(f'disaggregation results:\n{str(self.results)}')
-
-        queryfiles=['batch-land-alloc.xml', 'batch-population.xml', 'batch-water-ag.xml',
-                    'batch-water-dom.xml', 'batch-water-elec.xml', 'batch-water-livestock.xml',
-                    'batch-water-mfg.xml', 'batch-water-mining-alt.xml']
-        outfiles=['batch-land-alloc.csv', 'batch-population.csv', 'batch-water-ag.csv',
-                    'batch-water-dom.csv', 'batch-water-elec.csv', 'batch-water-livestock.csv',
-                    'batch-water-mfg.csv', 'batch-water-mining.csv']
-        queryfiles=map(inputdirprep, queryfiles)
-        outfiles=map(tempdirprep, outfiles)
-        util.gcam_query(queryfiles, dbxmlfile, inputdir, outfiles)
-
-        # reformat the GCAM outputs into the files the matlab code needs
-        # note all the csv files referred to here are temporary
-        # files.  On the input side the names need to match the ones
-        # used in the configuration of the gcam model interface
-        # queries, and on the output side they must match the ones
-        # used in the matlab disaggregation code.
-
-        # non-ag demands (sadly, I didn't think to put the lists
-        # above in the order we were planning to use them.)
-        wddom=waterdisag.proc_wdnonag(outfiles[3], tempdirprep("withd_dom.csv"))
-        wdelec=waterdisag.proc_wdnonag(outfiles[4], tempdirprep("withd_elec.csv"))
-        wdman=waterdisag.proc_wdnonag(outfiles[6], tempdirprep("withd_mfg.csv"))
-        wdmin=waterdisag.proc_wdnonag(outfiles[7], tempdirprep("withd_min.csv"))
-
-        # population data
-        waterdisag.proc_pop(outfiles[1], tempdirprep("pop_fac.csv"), tempdirprep("pop_tot.csv"), pop_demo_file)
-
-        # livestock demands
-        wdliv=waterdisag.proc_wdlivestock(outfiles[5], tempdirprep(
-            "withd_liv.csv"), tempdirprep('rgn_tot_withd_liv.csv'))
-
-        # agricultural demands and auxiliary quantities
-        gcam_irr=waterdisag.proc_ag_area(outfiles[0], tempdirprep("irrA.csv"))
-        waterdisag.proc_ag_vol(outfiles[2], tempdirprep("withd_irrV.csv"))
-
-        if not gcam_irr:
-            # If GCAM didn't produce endogeneous irrigated and
-            # rain-fed land allocations, then we need to read in some
-            # precalculated irrigation shares.
-            waterdisag.proc_irr_share(rgndirprep('irrigation-frac.csv'), tempdirprep("irrS.csv"))
-            read_irrS=1       # argument to matlab code
-        else:
-            read_irrS=0
-
-        # Run the disaggregation model
-        if transfer:
-            tflag=1
-        else:
-            tflag=0
-
-        matlabdata={'runoff': runoff_file, 'chflow': chflow_file,
-                      'histrunoff': hist_runoff_file,
-                      'histchflow': hist_chflow_file, 'basinqfile': basinqfile,
-                      'rgnqfile': rgnqfile, 'rgnconfig': rgnconfig, 'tempdir': tempdir,
-                      'ppgrid': ppgrid_data, 'ppflg': ppflag,
-                      'outputdir': outputdir, 'scenario': scenariotag,
-                      'runid': runid, 'trnflag': tflag, 'trnfile': transfer_file,
-                      'rdirrS': read_irrS}
-        matlabfn="run_disaggregation('{runoff}', '{chflow}', '{histrunoff}', '{histchflow}', '{basinqfile}', '{rgnqfile}', '{rgnconfig}', '{tempdir}', {ppflg:d}, '{ppgrid}', '{outputdir}', '{scenario}', '{runid}', {trnflag:d}, '{trnfile}', {rdirrS:d}); exit".format(**matlabdata)
-        print(f'current dir: {os.getcwd()} ')
-        print(f'matlab fn:  {matlabfn}')
-        with open(self.params["logfile"], "w") as logdata, open("/dev/null", "r") as null:
-            arglist=["matlab", "-nodisplay", "-nosplash", "-nodesktop", '-singleCompThread', "-r",
-                       matlabfn]
-
-            sp=subprocess.Popen(arglist, stdin=null, stdout=logdata, stderr=subprocess.STDOUT,
-                                  cwd=workdir)
-            return sp.wait()
-
-    # end of run_component
-
-# class for the netcdf-demo builder
-
-
-class NetcdfDemoComponent(ComponentBase):
-    """Component to build NetCDF output for the February 2015 demo.
-
-    params:
-      mat2nc  - location of the netcdf converter executable
-        dsid  - dataset id
-     forcing  - forcing value (written into the output data as metadata)
-    globalpop - 2050 global population (written into output data as metadata)
-       pcGDP  - 2050 per-capita GDP (written into output data as metadata -- currently not used anyhow)
-    outfile - output file
-
-    Component dependences:  HydroComponent, WaterDisaggregationComponent
-
-    This component is specific to a particular demo and probably can't easily be adapted for any other
-    purpose.  In that sense, it's obsolete and should be considered deprecated.
-    """
-
-    def __init__(self, cap_tbl):
-        super(NetcdfDemoComponent, self).__init__(cap_tbl)
-        cap_tbl['netcdf-demo']=self
-
-    def run_component(self):
-        """Create NetCDF file from HydroComponent and WaterDisaggregationComponent results."""
-        hydro_rslts=self.cap_tbl['gcam-hydro'].fetch()
-        water_rslts=self.cap_tbl['water-disaggregation'].fetch()
-
-        print(f'water_rslts:\n{str(water_rslts)}')
-
-        chflow_file=hydro_rslts['cflxfile']
-        transfer=water_rslts['water-transfer']
-
-        rcp=self.params['rcp']
-        pop=self.params['pop']
-        gdp=10.0              # Dummy value; we didn't implement the GDP scenarios.
-        outfile=util.abspath(self.params['outfile'])
-        mat2nc=util.abspath(self.params['mat2nc'], os.getcwd())
-
-        self.results['outfile']=outfile
-
-        # ensure that the directory the output file is being written to exists
-        util.mkdir_if_noexist(os.path.dirname(outfile))
-
-        try:
-            # create a temporary file to hold the config
-            (fd, tempfilename)=tempfile.mkstemp()
-            cfgfile=os.fdopen(fd, "w")
-
-            cfgfile.write(f'{rcp}\n{pop}\n{gdp}\n')
-            cfgfile.write(f'{outfile}\n')
-            if transfer:
-                cfgfile.write('no-data\n')
-            else:
-                cfgfile.write(f'{chflow_file}\n')
-            for var in ['wdirr', 'wdliv', 'wdelec', 'wdmfg', 'wdtotal', 'wddom', 'wsi']:
-                if transfer:
-                    # for water transfer cases, we don't have any gridded data, so substitute a grid full of NaN.
-                    cfgfile.write('no-data\n')
-                else:
-                    cfgfile.write(f'{water_rslts[var]}\n')
-            cfgfile.write(f'{water_rslts["pop-demo"]}\n')
-            for var in ['basin-supply', 'basin-wdirr', 'basin-wdliv', 'basin-wdelec', 'basin-wdmfg', 'basin-wdtot', 'basin-wddom', 'basin-wsi',
-                        'rgn-supply', 'rgn-wdirr', 'rgn-wdliv', 'rgn-wdelec', 'rgn-wdmfg', 'rgn-wdtot', 'rgn-wddom', 'rgn-wsi']:
-                cfgfile.write(f'{water_rslts[var]}\n')
-
-            cfgfile.close()
-
-            return subprocess.call([mat2nc, tempfilename])
-        finally:
-            os.unlink(tempfilename)
 
 
 class DummyComponent(ComponentBase):
@@ -1112,7 +548,7 @@ class DummyComponent(ComponentBase):
     def __init__(self, cap_tbl, capability_out='dummy'):
         super(DummyComponent, self).__init__(cap_tbl)
         self.name = capability_out
-        cap_tbl[self.name] = self
+        self.addcapability(self.name)
 
     def run_component(self):
         """Run, request, delay, output."""
@@ -1132,12 +568,18 @@ class DummyComponent(ComponentBase):
             sleep(delay / 1000.0)  # ms to s
 
             data.append((time() - st, f'Requesting data from {req}'))
-            self.cap_tbl[req].fetch()
+            self.fetch(req)
             data.append((time() - st, f'Recieved data from {req}'))
 
         sleep(finish_delay / 1000.0)
 
-        self.results['times'] = data
+        # Add our list of messages as the result for this capability
+        self.addresults(self.name, data)
+
         data.append((time() - st, f'Done {self.name}'))
 
         return 0
+
+    def report_test_results(self):
+        """Report the component's results to the unit testing code"""
+        return self.results[self.name]
