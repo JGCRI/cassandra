@@ -291,7 +291,6 @@ class ComponentBase(object):
         if capability in self.cap_tbl:
             raise RuntimeError(f'Duplicate definition of capability {capability}.')
         self.cap_tbl[capability] = self
-        self.results[capability] = {}
 
     def run_component(self):
         """Subclasses of ComponentBase are required to override this method.
@@ -453,7 +452,7 @@ class GcamComponent(ComponentBase):
         dbenabledpat = re.compile(r'<Value name="write-xml-db">(.*)</Value>')
 
         # get a reference to the results that we will be exporting
-        gcamrslt = self.results['gcam-core']
+        gcamrslt = {}
         
         with open(cfg, "r") as cfgfile:
             # we don't need to parse the whole config file; all we
@@ -491,8 +490,11 @@ class GcamComponent(ComponentBase):
                         raise RuntimeError(
                             msgpfx + "Config file has dbxml input turned off.  Running GCAM would be futile.")
                     else:
-                        break
+                        break 
 
+        # Add our output structure to the results dictionary.
+        self.results['gcam-core'] = gcamrslt
+        
         # now we're ready to actually do the run.  We don't check the return code; we let the run() method do that.
         print(f"Running:  {exe} -C{cfg} -L{logcfg}")
 
@@ -550,7 +552,13 @@ class DummyComponent(ComponentBase):
 
         sleep(finish_delay / 1000.0)
 
-        self.results['times'] = data
+        self.results[self.name] = {}
+        self.results[self.name]['times'] = data
         data.append((time() - st, f'Done {self.name}'))
 
         return 0
+
+    def report_test_results(self):
+        """Report the component's results to the unit testing code"""
+        return self.results[self.name]['times']
+    
