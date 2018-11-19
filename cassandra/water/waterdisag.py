@@ -1,12 +1,12 @@
 #!/bin/env python
-"""Functions supporting the water demand disaggregation module."""
+"""Functions supporting the water demand disaggregation component."""
 
 
-from gcam import util
+import util
 import re
 import os.path
 from sys import stderr, stdout
-import pplnt
+import water.pplnt
 
 # Canonical ordering of the regions for outputs
 _regions_ordered = []
@@ -38,7 +38,7 @@ def init_rgn_tables(rgnconfig):
     """Read the region-specific data tables in the rgnconfig directory.
 
     These tables are used internally for the calculations in this
-    (python) module.
+    (python) component.
 
     """
 
@@ -734,7 +734,7 @@ def pplant_proc(infile, tempdir, wfcoal, wfgas, wfnuc):
 
     Return value:  file name (absolute path) of the output file
     """
-    from gcam.water import pplnt
+    from water import pplnt
 
     outfile = os.path.abspath(os.path.join(tempdir, 'ppgrid.csv'))
     # set default values if necessary.  These values are placeholders, since

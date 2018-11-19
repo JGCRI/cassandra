@@ -13,7 +13,7 @@ import random
 # Place holder for the general params structure.  The constructor for
 # that structure knows it's supposed to add itself here.  (TODO: This
 # is kind of ugly.  Maybe we should think up a better way to do it.)
-# This variable should be considered private to this module
+# This variable should be considered private to this component
 global_params = None
 
 
@@ -119,7 +119,7 @@ def gcam_query(batchqfiles, dbxmlfiles, inputdir, outfiles):
                     same dbxml.
 
       inputdir    - Directory where the gcam-driver input files are located.
-                    This will typically be provided by the 'general' module.
+                    This will typically be provided by the 'general' component.
 
       outfiles    - List of output files.  should be the same length as
                     the query list.
@@ -147,7 +147,7 @@ def gcam_query(batchqfiles, dbxmlfiles, inputdir, outfiles):
     if len(dbxmllist) != len(qlist) or len(outlist) != len(qlist):
         raise RuntimeError("Mismatch in input lengths for gcam_query.")
 
-    genparams = global_params.fetch()
+    genparams = global_params.fetch('general')
     ModelInterface = genparams["ModelInterface"]
     DBXMLlib = genparams["DBXMLlib"]
 

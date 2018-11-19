@@ -12,11 +12,11 @@ The GCAM automation system is intended to provide a way to run all the
 steps of a GCAM analysis using a single command.  Such an analysis
 might include several data preprocessing steps, a run of the GCAM core
 model, and several data postprocessing steps.  The steps (called
-``modules'' throughout this documentation) to be performed are laid
+``components'' throughout this documentation) to be performed are laid
 out in a configuration file, the format of which is designed to be
 easily edited by hand or by an automated process (such as a graphical
-front end).  The system deduces dependencies between modules based on
-patterns of data use, and modules are run concurrently where possible.
+front end).  The system deduces dependencies between components based on
+patterns of data use, and components are run concurrently where possible.
 
 
 \section{Installation and Setup}
@@ -32,9 +32,9 @@ later versions of the Python interpreter will \emph{not} work.
 Output in NetCDF format requires the NetCDF-3 libraries.  These
 libraries are available from Unidata (\texttt{unidata.ucar.edu}).
 
-The modules that run GCAM analyses are distributed separately in their
+The components that run GCAM analyses are distributed separately in their
 own repositories.  In addition to run them you will need to install
-the code for all of the modules you wish to run.  The FY-15 demos use
+the code for all of the components you wish to run.  The FY-15 demos use
 the GCAM core model and the hydrology and water downscaling code.
 Both of these are distributed by PNNL.  The GCAM core model is a
 stand-alone program, while the hydrology and water downscaling code
@@ -58,23 +58,23 @@ converter.
 \section{How to run}
 
 In order to run a GCAM calculation using the automation system, you
-must first prepare a configuration file describing the GCAM modules to
+must first prepare a configuration file describing the GCAM components to
 include.  The configuration file is divided into sections, with each
-section corresponding to a module.  The section begins with the name
-of the module enclosed in square brackets and consists of a series of
+section corresponding to a component.  The section begins with the name
+of the component enclosed in square brackets and consists of a series of
 parameter-value pairs separated by an $=$ sign.  Parameters may be
-listed in any order.  Each module has its own set of parameter
+listed in any order.  Each component has its own set of parameter
 options, which are explained below.  An example configuration file is
 included with the code in the \texttt{example-chn.cfg} file.
 
-The code instantiates modules as it finds them in the configuration
-file.  Because of this, a module can be excluded from a run merely by
-not mentioning it in the configuration file.  Most of the modules are
+The code instantiates components as it finds them in the configuration
+file.  Because of this, a component can be excluded from a run merely by
+not mentioning it in the configuration file.  Most of the components are
 independent of one another, but some of them use output from other
-modules.  Trying to run a configuration that omits a module that
-produces data used by another module that is included in the
-configuration will cause an error.  The individual module descriptions
-below note when a module has dependencies.
+components.  Trying to run a configuration that omits a component that
+produces data used by another component that is included in the
+configuration will cause an error.  The individual component descriptions
+below note when a component has dependencies.
 
 Once the configuration file has been prepared, the program can be run
 from the command line by changing to the
@@ -82,10 +82,10 @@ top-level gcam-driver directory and running:\\
 \texttt{./gcam-driver <configfile>}\\
 
 
-\subsection{The Global Module}
-The Global module provides parameter values that will be used by multiple
-other modules.  Most of these values are related to the locations of
-files used to access GCAM data.  The name of this module is
+\subsection{The Global Component}
+The Global component provides parameter values that will be used by multiple
+other components.  Most of these values are related to the locations of
+files used to access GCAM data.  The name of this component is
 \texttt{[Global]}.
 \begin{description}
 \item[ModelInterface] The location of the \texttt{ModelInterface.jar}
@@ -105,12 +105,12 @@ files used to access GCAM data.  The name of this module is
 \end{description}
 
 
-\subsection{The Hydrology Module}
-The Hydrology module runs the hydrology for the future scenario and
-makes the results available to other modules.  The name of the module
-in the config file is \texttt{[HydroModule]}.
+\subsection{The Hydrology Component}
+The Hydrology component runs the hydrology for the future scenario and
+makes the results available to other components.  The name of the component
+in the config file is \texttt{[HydroComponent]}.
 
-This module requires the Historical Hydrology module.
+This component requires the Historical Hydrology component.
 
 \begin{description}
 \item[workdir] The working directory for the hydrology calculation.
@@ -118,7 +118,7 @@ This module requires the Historical Hydrology module.
   installed.
 \item[inputdir] Location of the CMIP5 model output used as input by the
   hydrology calculation.
-\item[outputdir] Directory into which to write the module's output
+\item[outputdir] Directory into which to write the component's output
   data.
 \item[init-storage-file] File giving the initial condition for the
   water stored in the soil column.  This file is included with the
@@ -137,14 +137,14 @@ This module requires the Historical Hydrology module.
   in the CMIP5 data directory.
 \end{description}
 
-\subsection{The Historical Hydrology Module}
-The Historical Hydrology module runs the hydrology for the historical
+\subsection{The Historical Hydrology Component}
+The Historical Hydrology component runs the hydrology for the historical
 period.  This calculation is similar to the future hydrology described
-above, but just different enough to require its own module.  The
+above, but just different enough to require its own component.  The
 historical input data is the same for all future scenarios, but it is
 different for each ESM, as it is obtained by running the ESM over the
-historical period.  The name of this module in the config file is
-\texttt{[HistoricalHydroModule]}.
+historical period.  The name of this component in the config file is
+\texttt{[HistoricalHydroComponent]}.
 
 \begin{description}
 \item[workdir] The working directory for the hydrology calculation.
@@ -152,7 +152,7 @@ historical period.  The name of this module in the config file is
   installed.
 \item[inputdir] Location of the CMIP5 model output used as input by
   the hydrology calculation.
-\item[outputdir] Directory into which to write the module's output.
+\item[outputdir] Directory into which to write the component's output.
 \item[logfile] File into which to write screen output from the
   matlab historical hydrology code.
 \item[gcm] Name of the earth system model to use as input.  This
@@ -163,9 +163,9 @@ historical period.  The name of this module in the config file is
   in the CMIP5 data directory.
 \end{description}
 
-\subsection{The {GCAM} Module}
-The GCAM module runs a GCAM scenario.  The name of the module in the
-config file is \texttt[GcamModule] (note the lack of capitalization in
+\subsection{The {GCAM} Component}
+The GCAM component runs a GCAM scenario.  The name of the component in the
+config file is \texttt[GcamComponent] (note the lack of capitalization in
 ``Gcam'').
 
 \begin{description}
@@ -182,33 +182,33 @@ config file is \texttt[GcamModule] (note the lack of capitalization in
   progress and can usually be discarded.
 \end{description}
 
-\subsection{The Water Disaggregation Module}
+\subsection{The Water Disaggregation Component}
 
-This module disaggregates the GCAM regional water demand outputs to a
+This component disaggregates the GCAM regional water demand outputs to a
 half-degree grid.  It also uses the gridded result to reaggregate to
 basin and regional scale (in the latter case, possibly using a
 different set of region definitions than GCAM did for its output).
-The module can be run using the output of the GCAM module described
+The component can be run using the output of the GCAM component described
 above, or it can be given the name of a preexisting GCAM output
-(DBXML) file.  In the latter case the GCAM module should be omitted
+(DBXML) file.  In the latter case the GCAM component should be omitted
 from the configuration.
 
-This module requires the Hydrology module.  If the GCAM module is
-included, then this module will use the output from that one.  If the
-GCAM module is not included, then the location of a GCAM output file
+This component requires the Hydrology component.  If the GCAM component is
+included, then this component will use the output from that one.  If the
+GCAM component is not included, then the location of a GCAM output file
 must be supplied through the \texttt{dbxml} parameter.  In the
 configuration file this model is referred to as
-\texttt{[WaterDisaggregationModule]}.
+\texttt{[WaterDisaggregationComponent]}.
 
 \begin{description}
 \item[workdir] Working directory for the water disaggregation code.
   Generally this will be the directory where the gcam-hydro code is
   installed.
 \item[tempdir] Directory to use for temporary files generated by the
-  module.
-\item[outputdir] Directory to use for the module's final outputs.
+  component.
+\item[outputdir] Directory to use for the component's final outputs.
 \item[scenario] Used to name the outputs.  For consistency this should
-  be the same as the scenario used in the Hydrology module, but it
+  be the same as the scenario used in the Hydrology component, but it
   isn't required.
 \item[logfile] File in which to write the screen output of the matlab
   water disaggregation code.  This information is useful only for
@@ -221,8 +221,8 @@ configuration file this model is referred to as
   This parameter is ignored (and can be omitted) if
   \texttt{water-transfer} is False; otherwise, it must be specified.
 \item[dbxml] \emph{(OPTIONAL)} Name of a GCAM output file to use in
-  for input.  This parameter is ignored if there is a GCAM module
-  present in the configuration.  If there is not a GCAM module in the
+  for input.  This parameter is ignored if there is a GCAM component
+  present in the configuration.  If there is not a GCAM component in the
   configuration, then this parameter must be specified.
 \item[power-plant-data] \emph{(OPTIONAL)} Name of the input file
   containing the power plant data described in
@@ -232,12 +232,12 @@ configuration file this model is referred to as
   versions of the disaggregation calculation).
 \end{description}
 
-\subsection{The netCDF Demo Module}
-The netCDF Demo module packages the output of the Hydrology and Water
-Disaggregation modules into a netCDF file suitable for display in the
-decision theater viewer.  This module requires both the Hydrology and
-Water Disaggregation modules to be present.  In the configuration file
-the module is referred to as \texttt{[NetcdfDemoModule]}.  Note that
+\subsection{The netCDF Demo Component}
+The netCDF Demo component packages the output of the Hydrology and Water
+Disaggregation components into a netCDF file suitable for display in the
+decision theater viewer.  This component requires both the Hydrology and
+Water Disaggregation components to be present.  In the configuration file
+the component is referred to as \texttt{[NetcdfDemoComponent]}.  Note that
 netCDF is not capitalized in the usual way.
 
 \begin{description}
@@ -255,13 +255,13 @@ netCDF is not capitalized in the usual way.
 
 \subsection{The ``clobber'' parameter}
 In addition to the parameters described in their individual sections
-above, most modules can take a parameter called ``clobber'', which
+above, most components can take a parameter called ``clobber'', which
 must be set to either ``True'' or ``False''.  If False, then the code
 will check to see whether the anticipated results already exist.  If
-they do, and if none of the upstream modules used by the module have
-produced new data, then the modules calculation will not run; the
+they do, and if none of the upstream components used by the component have
+produced new data, then the components calculation will not run; the
 preexisting results will be used instead.  If the ``clobber''
-parameter is set to True, then the module will run normally, with the
+parameter is set to True, then the component will run normally, with the
 new results overwriting the preexisting results, if any.
 
 \section{Using power plant location data}
@@ -327,7 +327,7 @@ produce more realistic spatial distributions in the future.
 
 \appendix
 \section{Technical Reference}
-Technical details for the python modules that make up the GCAM
+Technical details for the python components that make up the GCAM
 automation system can be obtained by using the \texttt{pydoc} command
 included with most python distributions.  For this to work the
 PYTHONPATH environment variable must include the \texttt{src}
