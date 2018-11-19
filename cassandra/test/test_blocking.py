@@ -13,26 +13,29 @@ class TestBlocking(unittest.TestCase):
         """Defines the DummyComponents that interact with each other."""
         capability_table = {}
 
-        self.d1 = DummyComponent(capability_table, 'Alice')
-        self.d2 = DummyComponent(capability_table, 'Bob')
-        self.d3 = DummyComponent(capability_table, 'Carol')
+        self.d1 = DummyComponent(capability_table)
+        self.d1.addparam('name', 'Alice')
+        self.d2 = DummyComponent(capability_table)
+        self.d2.addparam('name', 'Bob')
+        self.d3 = DummyComponent(capability_table)
+        self.d3.addparam('name', 'Carol')
 
         self.component_list = [self.d1, self.d2, self.d3]
-        self.names = [c.name for c in self.component_list]
+        self.names = [c.params['name'] for c in self.component_list]
 
     def testDelay(self):
         """Test that the time delay is working as expected."""
-        self.d1.addparam('capability_reqs', ['Carol'])
-        self.d1.addparam('request_delays', [1000])
-        self.d1.addparam('finish_delay', 1000)
+        self.d1.addparam('capability_reqs', 'Carol')
+        self.d1.addparam('request_delays', '1000')
+        self.d1.addparam('finish_delay', '1000')
 
-        self.d2.addparam('capability_reqs', ['Carol'])
-        self.d2.addparam('request_delays', [0])
-        self.d2.addparam('finish_delay', 1000)
+        self.d2.addparam('capability_reqs', 'Carol')
+        self.d2.addparam('request_delays', '0')
+        self.d2.addparam('finish_delay', '1000')
 
-        self.d3.addparam('capability_reqs', [])
-        self.d3.addparam('request_delays', [])
-        self.d3.addparam('finish_delay', 1000)
+        self.d3.addparam('capability_reqs', '')
+        self.d3.addparam('request_delays', '')
+        self.d3.addparam('finish_delay', '1000')
 
         self.runComponents()
         self.confirmSuccess()
@@ -53,8 +56,9 @@ class TestBlocking(unittest.TestCase):
 
         # Make each component depend on all of the components in front of it
         for i, c in enumerate(self.component_list):
-            c.addparam('capability_reqs', self.names[i + 1:])
-            c.addparam('request_delays', [0 for _ in self.names])
+            deps = self.names[i+1:]
+            c.addparam('capability_reqs', ','.join(deps))
+            c.addparam('request_delays', ','.join(['0'] * len(deps)))
             c.addparam('finish_delay', finish_delay)
 
         self.runComponents()
@@ -77,6 +81,9 @@ class TestBlocking(unittest.TestCase):
         """Run each component."""
         threads = []
 
+        for comp in self.component_list:
+            comp.finalize_parsing() 
+        
         for component in self.component_list:
             threads.append(component.run())
 
