@@ -57,8 +57,8 @@ class TestBlocking(unittest.TestCase):
         # Make each component depend on all of the components in front of it
         for i, c in enumerate(self.component_list):
             deps = self.names[i+1:]
-            c.addparam('capability_reqs', ','.join(deps))
-            c.addparam('request_delays', ','.join(['0'] * len(deps)))
+            c.addparam('capability_reqs', deps)
+            c.addparam('request_delays', ['0'] * len(deps))
             c.addparam('finish_delay', finish_delay)
 
         self.runComponents()

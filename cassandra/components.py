@@ -594,14 +594,18 @@ class DummyComponent(ComponentBase):
 
         # get this component's capability requirements
         if 'capability_reqs' in self.params:
-            cr = [str.strip(s) for s in self.params['capability_reqs'].split(',')]
+            cr = self.params['capability_reqs']
+            if not isinstance(cr, list):
+                cr = [cr] 
             self.capability_reqs = [s for s in cr if s != '']
         else:
             self.capability_reqs = []
 
         # get the request delays
         if 'request_delays' in self.params:
-            rd = [str.strip(s) for s in self.params['request_delays'].split(',')]
+            rd = self.params['request_delays']
+            if not isinstance(rd, list):
+                rd = [rd]
             self.request_delays = [int(s) for s in rd if s != '']
         else:
             self.request_delays = []
