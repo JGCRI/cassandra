@@ -13,8 +13,15 @@ class TestCapabilities(unittest.TestCase):
         """Defines the DummyComponents that interact with each other."""
         capability_table = {}
 
-        self.d1 = DummyComponent(capability_table, 'Alice')
-        self.d2 = DummyComponent(capability_table, 'Bob')
+        self.d1 = DummyComponent(capability_table)
+        self.d1.addparam('name','Alice')
+        self.d1.addparam('finish_delay', '1000')
+        self.d2 = DummyComponent(capability_table)
+        self.d2.addparam('name', 'Bob')
+        self.d2.addparam('finish_delay', '1000')
+
+        self.d1.finalize_parsing()
+        self.d2.finalize_parsing()
 
     def testAddCap(self):
         """Test that adding a capability puts it in the capability table"""

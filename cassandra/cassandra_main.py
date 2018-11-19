@@ -1,7 +1,7 @@
-#!/bin/env python
+#!/usr/bin/env python3
 """Cassandra model coupling framework
 
-  usage:  cassandra.py <configfile>
+  usage:  cassandra_main.py <configfile>
 
   This program will run the cassandra model coupling system using the
   configuration details from the configuration file supplied on the
@@ -13,11 +13,17 @@
 import sys
 import re
 import threading
+import argparse
 
 
-def config_parse(cfgfile_name):
+def config_parse(argvals):
     """Parse the configuration file."""
 
+    if argvals.mp:
+        raise NotImplementedError('Multiprocessing mode is not yet implemented.')
+    
+    cfgfile_name = argvals.ctlfile
+    
     # initialize the structures that will receive the data we are
     # parsing from the file
     capability_table = {}
@@ -91,8 +97,14 @@ def config_parse(cfgfile_name):
 if __name__ == "__main__":
     from cassandra.components import *
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mp', action='store_true', default=False, help='Use multiprocessing.')
+    parser.add_argument('ctlfile', help='Name of the configuration file for the calculation.')
+
+    argvals = parser.parse_args()
+    
     try:
-        (component_list, cap_table) = config_parse(sys.argv[1])
+        (component_list, cap_table) = config_parse(argvals)
     except IndexError:
         print(__doc__)
         sys.exit(0)

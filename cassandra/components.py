@@ -545,10 +545,38 @@ class DummyComponent(ComponentBase):
        finish_delay - delay (ms) before the component finalizes and exports
     """
 
-    def __init__(self, cap_tbl, capability_out='dummy'):
+    def __init__(self, cap_tbl):
         super(DummyComponent, self).__init__(cap_tbl)
-        self.name = capability_out
+        # most components add a capability here, but we can't do that
+        # yet because we need our parameters before we can decide what
+        # capability we are offering.
+        
+    def finalize_parsing(self):
+        super(DummyComponent, self).finalize_parsing()
+
+        # get this component's name and add it as a capability
+        self.name = self.params['name']
         self.addcapability(self.name)
+
+        # get this component's capability requirements
+        if 'capability_reqs' in self.params:
+            cr = [str.strip(s) for s in self.params['capability_reqs'].split(',')]
+            self.capability_reqs = [s for s in cr if s != '']
+        else:
+            self.capability_reqs = []
+
+        # get the request delays
+        if 'request_delays' in self.params:
+            rd = [str.strip(s) for s in self.params['request_delays'].split(',')]
+            self.request_delays = [int(s) for s in rd if s != '']
+        else:
+            self.request_delays = []
+
+        if len(self.capability_reqs) != len(self.request_delays):
+            raise RuntimeError('Lengths of capability_reqs and request_delays must be the same.')
+
+        # get the finish delay
+        self.finish_delay = int(self.params['finish_delay'])
 
     def run_component(self):
         """Run, request, delay, output."""
@@ -559,9 +587,9 @@ class DummyComponent(ComponentBase):
 
         data = [st_msg]  # list of tuples: (time, message)
 
-        capability_reqs = self.params['capability_reqs']
-        request_delays = self.params['request_delays']
-        finish_delay = self.params['finish_delay']
+        capability_reqs = self.capability_reqs
+        request_delays = self.request_delays
+        finish_delay = self.finish_delay
 
         for i, req in enumerate(capability_reqs):
             delay = request_delays[i]
