@@ -8,26 +8,21 @@ and particularly complex models could be split over several components.
 
 Classes:
 
-ComponentBase         - Base class for all components.  Provides the
-                        interface, as well as services like managing
-                        threads, locks, and condition variables.
-
 CapabilityNotFound    - Exception class raised when a component requests
                         a capability that is not provided by any
                         component in the system.
+
+ComponentBase         - Base class for all components.  Provides the
+                        interface, as well as services like managing
+                        threads, locks, and condition variables.
 
 GlobalParamsComponent - Store parameters common to all components.
 
 GcamComponent         - Run the GCAM core model.
 
-HydroComponent        - Run the future hydrology calculation.
+XanthosComponent      - Run the Xanthos global hydrology model.
 
-HistoricalHydroComponent - Run the historical hydrology calculation.
-
-WaterDisaggregationComponent - Run the water disaggregation calculation.
-
-NetcdfDemoComponent   - Package outputs into a netCDF file for the
-                        February 2015 demo.
+DummyComponent        - A simple component class for tests.
 
 """
 
@@ -541,7 +536,7 @@ class XanthosComponent(ComponentBase):
 
     def __init__(self, cap_tbl):
         super(XanthosComponent, self).__init__(cap_tbl)
-        cap_tbl["xanthos"] = self
+        self.addcapability("xanthos")
 
     def run_component(self):
         """Run Xanthos."""
@@ -558,10 +553,10 @@ class XanthosComponent(ComponentBase):
         # args['PrecipitationFile'] = self.cap_tbl['fldgen_pr'].fetch()
         # args['trn_tas'] = self.cap_tbl['fldgen_tas'].fetch()
 
-        xth.execute(args)
+        xth_results = xth.execute(args)
 
-        # Currently Xanthos results are written to disk, but changing that to
-        # return in-memory would be fairly strightforward
+        # Add runoff (Q) results from xanthos to the xanthos capability
+        self.addresults("xanthos", xth_results.Q)
 
         return 0
 
