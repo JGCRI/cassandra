@@ -8,26 +8,21 @@ and particularly complex models could be split over several components.
 
 Classes:
 
-ComponentBase         - Base class for all components.  Provides the
-                        interface, as well as services like managing
-                        threads, locks, and condition variables.
-
 CapabilityNotFound    - Exception class raised when a component requests
                         a capability that is not provided by any
                         component in the system.
+
+ComponentBase         - Base class for all components.  Provides the
+                        interface, as well as services like managing
+                        threads, locks, and condition variables.
 
 GlobalParamsComponent - Store parameters common to all components.
 
 GcamComponent         - Run the GCAM core model.
 
-HydroComponent        - Run the future hydrology calculation.
+XanthosComponent      - Run the Xanthos global hydrology model.
 
-HistoricalHydroComponent - Run the historical hydrology calculation.
-
-WaterDisaggregationComponent - Run the water disaggregation calculation.
-
-NetcdfDemoComponent   - Package outputs into a netCDF file for the
-                        February 2015 demo.
+DummyComponent        - A simple component class for tests.
 
 """
 
@@ -525,6 +520,45 @@ class GcamComponent(ComponentBase):
         else:
             with open(logfile, "w") as lf:
                 return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf, cwd=self.workdir)
+
+
+class XanthosComponent(ComponentBase):
+    """Class for the global hydrologic model Xanthos
+
+    This component makes use of the Xanthos package, an open-source
+    hydrologic model.
+
+    For more information: https://github.com/JGCRI/xanthos
+
+    params:
+       config_file - path to Xanthos config file
+    """
+
+    def __init__(self, cap_tbl):
+        super(XanthosComponent, self).__init__(cap_tbl)
+        self.addcapability("xanthos")
+
+    def run_component(self):
+        """Run Xanthos."""
+        import xanthos
+
+        config_file = self.params["config_file"]
+
+        xth = xanthos.Xanthos(config_file)
+
+        args = {}
+        # Eventually we will add a fetch call to get precipitation and temp data
+        # from another component:
+        #
+        # args['PrecipitationFile'] = self.cap_tbl['fldgen_pr'].fetch()
+        # args['trn_tas'] = self.cap_tbl['fldgen_tas'].fetch()
+
+        xth_results = xth.execute(args)
+
+        # Add runoff (Q) results from xanthos to the xanthos capability
+        self.addresults("xanthos", xth_results.Q)
+
+        return 0
 
 
 class DummyComponent(ComponentBase):

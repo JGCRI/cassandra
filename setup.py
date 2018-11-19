@@ -22,9 +22,13 @@ setup(
     author_email='robert.link@pnnl.gov',
     license='BSD 2-Clause',
     packages=find_packages(),
-    python_requires=">=3.6",
+    python_requires='>=3.6',
     long_description=readme(),
     install_requires=get_requirements(),
+    extras_require={
+        'xanthos':  ["xanthos>=1.0"],
+    },
+    dependency_links=['https://github.com/JGCRI/xanthos.git'],
     classifiers=[
         "Programming Language :: Python :: 3.6"
         "Programming Language :: Python :: 3.7"
