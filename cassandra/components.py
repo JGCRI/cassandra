@@ -551,8 +551,8 @@ class XanthosComponent(ComponentBase):
         args = {}
 
         # Wait for fldgen to produce precipitation and temp data
-        fldgen_pr = self.cap_tbl['fldgen_pr'].fetch()
-        fldgen_tas = self.cap_tbl['fldgen_tas'].fetch()
+        fldgen_pr = self.fetch('fldgen_pr')
+        fldgen_tas = self.fetch('fldgen_tas')
 
         assert fldgen_pr['units'] == 'mm_month-1'
         assert fldgen_tas['units'] == 'C'
