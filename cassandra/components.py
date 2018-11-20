@@ -561,6 +561,84 @@ class XanthosComponent(ComponentBase):
         return 0
 
 
+class FldgenComponent(ComponentBase):
+    """Class for the precipitation and temperature grids
+
+    This component makes use of the fldgen code. That code lives in its
+    own repository and must be installed independently.
+
+    To start, only works with the streamlined branch modified not to
+    call Xanthos.
+
+    params:
+       workdir  - working directory (location of frontEnd_grandExp code)
+
+    results: pr and temp grids
+    """
+
+    def __init__(self, cap_tbl):
+        super(FldgenComponent, self).__init__(cap_tbl)
+        self.addcapability("fldgen")
+
+    def run_component(self):
+        """Run the fldgen R scripts."""
+        from rpy2.robjects.packages import importr
+        import rpy2.robjects as robjects
+        import numpy as np
+
+        workdir = self.params["workdir"]
+
+        an2month = os.path.join(workdir, "an2month")
+        fldgen = os.path.join(workdir, "fldgen")
+        gexp_funs = os.path.join(workdir, "frontEnd_grandExp/grand_experiment_functions.R")
+        emulator_mapping = os.path.join(workdir, "input", "emulator_mapping.csv")
+        hector_runs = os.path.join(workdir, "input", "hector_tgav-rcp45.csv")
+
+        devtools = importr("devtools")
+        devtools.load_all(an2month)
+        devtools.load_all(fldgen)
+
+        rsource = robjects.r["source"]
+        rsource(gexp_funs)
+
+        grand_experiment = robjects.r["grand_experiment"]
+        r = grand_experiment(mapping=emulator_mapping, tgavSCN=hector_runs, xanthos_dir='', N=1)
+
+        # r is a complex nested structure:
+        # Emulator1 (e.g. ipsl-cm5a-lr)
+        # -- Scenario1 (e.g. rcp45)
+        # -- -- RunNum1 (e.g. 1)
+        # -- -- -- Monthly Precipitation
+        # -- -- -- -- Precip Data (months x 67420)
+        # -- -- -- -- Precip Coordinates (3 (cell, lon, lat) x 67420)
+        # -- -- -- -- Precip Units (e.g. mm_month-1)
+        # -- -- -- Monthly Temperature
+        # -- -- -- -- Temp Data (months x 67420)
+        # -- -- -- -- Temp Coordinates (3 (cell, lon, lat) x 67420)
+        # -- -- -- -- Temp Units (e.g. C)
+        # -- -- RunNum2
+        # -- -- -- ...
+        # -- Scenario2
+        # -- -- ...
+        # Emulator2
+        # -- ...
+        # ...
+        emulator_name = r[0]
+        run_name = emulator_name[0]
+        run_N = run_name[0]
+
+        self.addresults('precip_data', np.asarray(run_N[0][0]))
+        self.addresults('precip_coords', np.asarry(run_N[0][1]))
+        self.addresults('precip_units', run_N[0][2][0])
+        self.addresults('tas_data', np.asarray(run_N[1][0]))
+        self.addresults('tas_coords', np.asarray(run_N[1][1]))
+        self.addresults('tas_units', run_N[1][2][0])
+
+        print(self.results['fldgen'])
+
+        return 0
+
+
 class DummyComponent(ComponentBase):
     """Dummy component for tests
 
@@ -584,7 +662,7 @@ class DummyComponent(ComponentBase):
         # most components add a capability here, but we can't do that
         # yet because we need our parameters before we can decide what
         # capability we are offering.
-        
+
     def finalize_parsing(self):
         super(DummyComponent, self).finalize_parsing()
 
@@ -596,7 +674,7 @@ class DummyComponent(ComponentBase):
         if 'capability_reqs' in self.params:
             cr = self.params['capability_reqs']
             if not isinstance(cr, list):
-                cr = [cr] 
+                cr = [cr]
             self.capability_reqs = [s for s in cr if s != '']
         else:
             self.capability_reqs = []

@@ -7,11 +7,12 @@ create_component: Create a component by name.
 import cassandra.components as comp
 
 _available_components = {
-    'Global' : comp.GlobalParamsComponent,
-    'GcamComponent' : comp.GcamComponent,
+    'Global': comp.GlobalParamsComponent,
+    'GcamComponent': comp.GcamComponent,
+    'FldgenComponent': comp.FldgenComponent,
     'XanthosComponent': comp.XanthosComponent,
-    'DummyComponent' : comp.DummyComponent,
-    }
+    'DummyComponent': comp.DummyComponent,
+}
 
 
 def create_component(compname, cap_tbl):
@@ -24,7 +25,7 @@ def create_component(compname, cap_tbl):
     :param cap_tbl: Capability table to use to initialize the component.
     :return: Newly created component.
     """
-    
+
     # ignore everything following a '.' in the component name
     csplt = compname.split('.')
     compname = csplt[0].strip()
@@ -33,6 +34,3 @@ def create_component(compname, cap_tbl):
         raise RuntimeError(f'Unknown component type {compname}')
 
     return _available_components[compname](cap_tbl)
-
-
-
