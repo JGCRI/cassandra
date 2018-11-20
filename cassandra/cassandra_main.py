@@ -15,8 +15,11 @@ import re
 import threading
 import argparse
 
+
 def bootstrap_sp(cfgfile_name):
-    """Bootstrap the multithreaded version of the calculation
+    """
+    Bootstrap the multithreaded (single processing) version of the
+    calculation.
 
     :param cfgfile_name:  Name of the configuration file
     :return: (component-list, capability-table)
@@ -24,8 +27,7 @@ def bootstrap_sp(cfgfile_name):
 
     from configobj import ConfigObj
     from cassandra.compfactory import create_component
-    
-    
+
     # initialize the structures that will receive the data we are
     # parsing from the file
     capability_table = {}
@@ -62,7 +64,7 @@ if __name__ == "__main__":
 
     if argvals.mp:
         raise NotImplementedError('Multiprocessing is not yet implemented.')
-    
+
     try:
         (component_list, cap_table) = bootstrap_sp(argvals.ctlfile)
     except IndexError:

@@ -10,7 +10,7 @@ def pplnt_grid(tuple_list, grid_size=[720, 360], extent=[-180, -90, 180, 90]):
     Maps (longitude, latitude, water-usage) tuples to a grid. Each(lon,lat) value
     is converted to an (i,j) value representing a column and row of the grid.
     Outputs a dictionary with keys that are (i,j) pairs and values that are
-    the sum of water usage withiin each grid cell (i,j).
+    the sum of water usage within each grid cell (i,j).
 
     Arguments:
         tuple_list - list of (lon, lat, water-usage) tuples
