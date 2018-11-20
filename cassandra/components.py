@@ -20,6 +20,9 @@ GlobalParamsComponent - Store parameters common to all components.
 
 GcamComponent         - Run the GCAM core model.
 
+TethysComponent       - Run the Tethys spatiotemporal global water use
+                        downscaling model.
+
 XanthosComponent      - Run the Xanthos global hydrology model.
 
 DummyComponent        - A simple component class for tests.
@@ -522,6 +525,38 @@ class GcamComponent(ComponentBase):
                 return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf, cwd=self.workdir)
 
 
+class TethysComponent(ComponentBase):
+    """Class for the global water withdrawal downscaling model Tethys.
+
+    This component makes use of the Tethys package, an open-source
+    spatiotemporal water use downscaling model.
+
+    For more information: https://github.com/JGCRI/tethys
+
+    params:
+       config_file - path to Tethys config file
+    """
+
+    def __init__(self, cap_tbl):
+        super(TethysComponent, self).__init__(cap_tbl)
+        self.addcapability("tethys_gis")
+        self.addcapability("tethys_gridded")
+
+    def run_component(self):
+        """Run Tethys."""
+        from tethys.model import Tethys
+
+        config_file = self.params["config_file"]
+
+        # run the Tethys model
+        tethys_results = Tethys(config=config_file)
+
+        self.addresults("tethys_gis", tethys_results.gis_data)
+        self.addresults("tethys_gridded", tethys_results.gridded_data)
+
+        return 0
+
+
 class XanthosComponent(ComponentBase):
     """Class for the global hydrologic model Xanthos
 
@@ -584,7 +619,7 @@ class DummyComponent(ComponentBase):
         # most components add a capability here, but we can't do that
         # yet because we need our parameters before we can decide what
         # capability we are offering.
-        
+
     def finalize_parsing(self):
         super(DummyComponent, self).finalize_parsing()
 
@@ -596,7 +631,7 @@ class DummyComponent(ComponentBase):
         if 'capability_reqs' in self.params:
             cr = self.params['capability_reqs']
             if not isinstance(cr, list):
-                cr = [cr] 
+                cr = [cr]
             self.capability_reqs = [s for s in cr if s != '']
         else:
             self.capability_reqs = []
