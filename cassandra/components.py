@@ -417,7 +417,7 @@ class GcamComponent(ComponentBase):
     Results:
       dbxml      = gcam dbxml output file.  We get this from the gcam config.xml file.
 
-    Component dependences: none
+    Component dependencies: none
 
     """
 
@@ -682,5 +682,5 @@ class DummyComponent(ComponentBase):
         return 0
 
     def report_test_results(self):
-        """Report the component's results to the unit testing code"""
+        """Report the component's results to the unit testing code."""
         return self.results[self.name]

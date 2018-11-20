@@ -26,9 +26,12 @@ setup(
     long_description=readme(),
     install_requires=get_requirements(),
     extras_require={
-        'xanthos':  ["xanthos>=1.0"],
+        'xanthos': ["xanthos>=1.0"],
+        'tethys': ["tethys>=1.0.0"],
     },
-    dependency_links=['https://github.com/JGCRI/xanthos.git'],
+    dependency_links=[
+        'git+https://github.com/JGCRI/gcam_reader@master#egg=gcam_reader-0.5.0',
+    ],
     classifiers=[
         "Programming Language :: Python :: 3.6"
         "Programming Language :: Python :: 3.7"
