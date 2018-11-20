@@ -64,12 +64,14 @@ if __name__ == "__main__":
 
     if argvals.mp:
         raise NotImplementedError('Multiprocessing is not yet implemented.')
-
-    try:
+    
+    if argvals.mp:
+        # See notes in mp.py about side effects of importing that module.
+        from cassandra.mp import bootstrap_mp
+        (component_list, cap_table) = bootstrap_mp(argvals)
+    else:
         (component_list, cap_table) = bootstrap_sp(argvals.ctlfile)
-    except IndexError:
-        print(__doc__)
-        sys.exit(0)
+
 
     # We will look up "global" in the cap_table and process any
     # global parameters here, but in the current version we don't
