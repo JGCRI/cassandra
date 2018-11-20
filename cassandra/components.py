@@ -541,17 +541,24 @@ class XanthosComponent(ComponentBase):
     def run_component(self):
         """Run Xanthos."""
         import xanthos
+        import pandas as pd
 
         config_file = self.params["config_file"]
+        workdir = self.params["workdir"]
 
         xth = xanthos.Xanthos(config_file)
 
         args = {}
-        # Eventually we will add a fetch call to get precipitation and temp data
-        # from another component:
-        #
-        # args['PrecipitationFile'] = self.cap_tbl['fldgen_pr'].fetch()
-        # args['trn_tas'] = self.cap_tbl['fldgen_tas'].fetch()
+
+        # Wait for fldgen to produce precipitation and temp data
+        fldgen_pr = self.cap_tbl['fldgen_pr'].fetch()
+        fldgen_tas = self.cap_tbl['fldgen_tas'].fetch()
+
+        assert fldgen_pr['units'] == 'mm_month-1'
+        assert fldgen_tas['units'] == 'C'
+
+        args['PrecipitationFile'] = self.prep_for_xanthos(workdir, fldgen_pr)
+        args['trn_tas'] = self.prep_for_xanthos(workdir, fldgen_tas)
 
         xth_results = xth.execute(args)
 
@@ -559,6 +566,47 @@ class XanthosComponent(ComponentBase):
         self.addresults("xanthos", xth_results.Q)
 
         return 0
+
+    def prep_for_xanthos(self, xanthos_dir, monthly_data):
+        """Convert a fldgen output array to Xanthos' expected input format.
+
+        Retrieve Xanthos grid cells from alternately indexed vectors.
+
+        Convert spatial data from a list of numeric vectors (each list element is one
+        month) to the input format expected by Xanthos (land cell x months).
+
+        params:
+          xanthos_dir: Full file path to xanthos input/output directory
+          monthly_data: Input data for xanthos as numpy array (cells x months)
+
+        returns:
+          2d array of Xanthos cells by month
+
+        """
+
+        # Load reference file mapping Xanthos cell index to lat/lon
+        xcells_path = os.path.join(xanthos_dir, 'input/reference/coordinates.csv')
+        if not os.path.exists(xcells_path):
+            raise IOError('Invalid path to Xanthos directory')
+
+        xcolnames = ['cell_id', 'lon', 'lat', 'lon_idx', 'lat_idx']
+        xcells = pd.read_csv(xcells_path, names=xcolnames)
+
+        ycolnames = c('index', 'lat', 'lon')
+        ycells = pd.DataFrame(monthly_data['data'].T, columns=ycolnames)
+
+        # stopifnot(nrow(ycells) == nrow(xcells))
+
+        bothcells = ycells.merge(xcells, on=['lat', 'lon'])
+
+        # Order by Xanthos cell id for indexing
+        bothcells.sort_values(by='cell_id', inplace=True)
+
+        # Re-order the data to correct order by extracting with the cell index
+        cells = monthly_data[:, bothcells.index.astype(int)]
+
+        # Rows and columns need to be flipped
+        return cells.T
 
 
 class FldgenComponent(ComponentBase):
@@ -578,7 +626,8 @@ class FldgenComponent(ComponentBase):
 
     def __init__(self, cap_tbl):
         super(FldgenComponent, self).__init__(cap_tbl)
-        self.addcapability("fldgen")
+        self.addcapability("fldgen_pr")
+        self.addcapability("fldgen_tas")
 
     def run_component(self):
         """Run the fldgen R scripts."""
@@ -627,14 +676,20 @@ class FldgenComponent(ComponentBase):
         run_name = emulator_name[0]
         run_N = run_name[0]
 
-        self.addresults('precip_data', np.asarray(run_N[0][0]))
-        self.addresults('precip_coords', np.asarry(run_N[0][1]))
-        self.addresults('precip_units', run_N[0][2][0])
-        self.addresults('tas_data', np.asarray(run_N[1][0]))
-        self.addresults('tas_coords', np.asarray(run_N[1][1]))
-        self.addresults('tas_units', run_N[1][2][0])
+        fldgen_pr = {
+            'data': np.asarray(run_N[0][0]),
+            'coords': np.asarray(run_N[0][1]),
+            'units': run_N[0][2][0]  # All R strings are in vectors; take 1st element
+        }
 
-        print(self.results['fldgen'])
+        fldgen_tas = {
+            'data': np.asarray(run_N[1][0]),
+            'coords': np.asarray(run_N[1][1]),
+            'units': run_N[1][2][0]
+        }
+
+        self.addresults('fldgen_pr', fldgen_pr)
+        self.addresults('fldgen_tas', fldgen_tas)
 
         return 0
 
