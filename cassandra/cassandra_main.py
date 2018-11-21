@@ -64,7 +64,7 @@ if __name__ == "__main__":
 
     if argvals.mp:
         # See notes in mp.py about side effects of importing that module.
-        from cassandra.mp import bootstrap_mp
+        from cassandra.mp import bootstrap_mp, finalize
         (component_list, cap_table) = bootstrap_mp(argvals)
     else:
         (component_list, cap_table) = bootstrap_sp(argvals.ctlfile)
@@ -95,7 +95,6 @@ if __name__ == "__main__":
     # If this is a multiprocessing calculation, then we need to
     # perform the finalization procedure
     if argvals.mp:
-        from cassandra.mp import finalize
         finalize(component_list[0], threads[0])
         
     # Check to see if any of the components failed

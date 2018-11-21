@@ -65,7 +65,7 @@ def mp_bootstrap(argvals):
     # this process.  We need to create and initialize the components assigned to
     # us.  We also need to create a RAB.
     cap_tbl = {}
-    rab = RAB(cap_tbl)
+    rab = RAB(cap_tbl, world)
     comps = [rab]
     for section, conf in my_assignment.items():
         component = create_component(section, cap_tbl)
@@ -77,8 +77,10 @@ def mp_bootstrap(argvals):
     # component needs to distribute its local capability table to all the other
     # ranks, which we can do with an allgather collective.  Then each rank adds
     # all of the capabilities it got from other ranks to its RAB's list of
-    # capabilities.
-    allcaptbls = world.allgather(cap_tbl)
+    # capabilities.  (We don't actually send the whole capability table, just
+    # the names of the capabilities it contains.)
+    capabilities = list(cap_tbl.keys()).remove('Global')
+    allcaptbls = world.allgather(capabilities)
 
     for i, remote_cap in enumerate(allcaptbls):
         if i == rank:
