@@ -63,9 +63,6 @@ if __name__ == "__main__":
     argvals = parser.parse_args()
 
     if argvals.mp:
-        raise NotImplementedError('Multiprocessing is not yet implemented.')
-    
-    if argvals.mp:
         # See notes in mp.py about side effects of importing that module.
         from cassandra.mp import bootstrap_mp
         (component_list, cap_table) = bootstrap_mp(argvals)

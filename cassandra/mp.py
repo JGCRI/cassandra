@@ -38,6 +38,9 @@ TAG_DATA = 103                  # Response to TAG_REQ
 
 TAG_DONE = 999                  # All components have finished
 
+### Other config constants for MPI
+SUPERVISOR_RANK = 0
+
 
 def mp_bootstrap(argvals):
     """Bootstrap the multiprocessing system.
@@ -54,19 +57,19 @@ def mp_bootstrap(argvals):
     world = MPI.COMM_WORLD
     rank = world.Get_rank()
 
-    if rank==0:
-        compsections = distribute_assignments_supervisor(argvals)
+    if rank == SUPERVISOR_RANK:
+        my_assignment = distribute_assignments_supervisor(argvals)
     else:
-        compsections = distribute_assignments_worker(argvals)
+        my_assignment = distribute_assignments_worker(argvals)
 
 
-    # compsections will be a list of dictionaries of configuration sections.
-    # Each list element corresponds to an MPI rank.  We need to create and
-    # initialize the components assigned to us.  We also need to create a RAB.
+    # my_assignment will be a dictionary of configuration sections assigned to
+    # this process.  We need to create and initialize the components assigned to
+    # us.  We also need to create a RAB.
     cap_tbl = {}
     rab = RAB(cap_tbl)
     comps = [rab]
-    for section, conf in compsections[rank].items:
+    for section, conf in my_assignment.items():
         component = create_component(section, cap_tbl)
         component.params.update(conf)
         component.finalize_parsing()
@@ -89,3 +92,82 @@ def mp_bootstrap(argvals):
     # Return the component list and capability table
     return (comps, cap_tbl)
 
+
+def distribute_assignments_worker(argvals):
+    """Prepare to receive component assignments
+
+    :param argvals: Arguments structure parsed by argparse.  Not currently used,
+                    but included in case we eventually want to have command line
+                    arguments that affect the way assignments are handled.
+    :return: Dictionary of component definitions for components assigned to this
+                    worker.
+
+    This function should be called by the worker processes.  It will cause them to
+    immediately enter a blocking receive for TAG_CONFIG.  The supervisor process
+    will send each worker the configuration section for the components it will
+    be hosting.  Every worker will get the Global section; other sections will
+    each be sent to just one woker each.
+    """
+
+    world = MPI.COMM_WORLD
+    return world.recv(source=SUPERVISOR_RANK, tag=TAG_CONFIG)
+
+
+def distribute_assignments_supervisor(argvals):
+    """Parse config file and distribute component assignments
+
+    :param argvals: Arguments structure parsed by argparse.  
+    :return: Dictionary of component definitions for components assigned to this
+                    process (i.e., the supervisor).
+
+    This function should be called only by the supervisor process.  It will
+    parse the configuration file and distribute the instantiated components to
+    the workers.  Apart from the global parameters component, which is
+    distributed to all workers, components are distributed round-robin.
+
+    Each component may have an optional parameter called `mp.weight`, which will
+    affect the way the components are assigned.  Currently the weight just
+    affects the order of the round-robin assignment; components are assigned in
+    descending order of weight, minimizing the likelihood that two heavy
+    components will end up on the same node.  (This only matters if there are
+    fewer nodes than components.)  Future enhancements may attempt to balance
+    (approximately) the total weight on each node, so that a large collection of
+    light components could all be assigned to a single node, rather than being
+    shared out amongst the nodes hosting heavy components.
+    """
+
+    from configobj import ConfigObj
+    from cassandra.compfactory import create_component
+
+    config = ConfigObj(argvals.ctlfle)
+
+    # Get list of section names 
+    section_names = list(config.keys())
+    try:
+        # Global section goes to everyone.  Also, it's required, so check for it
+        # here
+        section_names.remove('Global')
+    except ValueError as e:
+        raise RuntimeError("Config file must have a '[Global]' section") from e
+    
+    section_weights = [config[s].get('mp.weight', 1.0) for s in section_names]
+    name_weight = zip(section_names, section_weights)
+    section_names = [s[0] for s in sorted(name_weight, key=lambda x:x[1], reverse=True)]
+
+    world = MPI.COMM_WORLD
+    nproc = world.Get_size()
+    nextrank = (SUPERVISOR_RANK+1) % nproc
+    
+    assignments = [{'Global':config['Global']}] * nproc
+    for section in section_names:
+        assignments[nextrank][section] = config[section]
+        nextrank += 1
+
+    # Distribute these assignments to the workers
+    for r in range(nproc):
+        if r != SUPERVISOR_RANK:
+            world.send(assignments[r], dest=r, tag=TAG_CONFIG)
+
+    return assignments[SUPERVISOR_RANK]
+
+    
