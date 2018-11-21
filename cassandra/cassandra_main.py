@@ -80,10 +80,24 @@ if __name__ == "__main__":
         print(f"running {str(component.__class__)}")
         threads.append(component.run())
 
-    # Wait for all threads to complete before printing end message.
-    for thread in threads:
+    # Wait for all component threads to complete before printing end
+    # message.
+    if argvals.mp:
+        # The RAB thread will always be first in the thread list
+        component_threads = threads[1:]
+    else:
+        # No RAB in a single-node calculation
+        component_threads = threads
+        
+    for thread in component_threads:
         thread.join()
 
+    # If this is a multiprocessing calculation, then we need to
+    # perform the finalization procedure
+    if argvals.mp:
+        from cassandra.mp import finalize
+        finalize(component_list[0], threads[0])
+        
     # Check to see if any of the components failed
     fail = 0
     for component in component_list:

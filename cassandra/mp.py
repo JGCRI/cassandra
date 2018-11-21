@@ -32,11 +32,9 @@ from cassandra.rab import RAB
 
 ### Constants for MPI tags
 TAG_CONFIG = 100                # configuration distribution method
-TAG_CAPTBL = 101                # distribute capability tables
 TAG_REQ = 102                   # Request data for a capability
 TAG_DATA = 103                  # Response to TAG_REQ
 
-TAG_DONE = 999                  # All components have finished
 
 ### Other config constants for MPI
 SUPERVISOR_RANK = 0
@@ -171,3 +169,26 @@ def distribute_assignments_supervisor(argvals):
     return assignments[SUPERVISOR_RANK]
 
     
+def finalize(rab, thread):
+    """Finalization procedure for mp calculations.
+
+    :param rab: The RAB object for this worker or supervisor process.
+    :param thread: Thread object for the thread running the RAB.
+
+    The first thing we do here is execute a barrier.  This ensures that no
+    component will proceed with the shutdown procedure until all processes have
+    finished their work.  In the meantime, all RABs will remain active servicing
+    requests from components that are still running.
+
+    Once all components have finished, all processes need to shut down their
+    RABs and exit.
+    """
+
+    world = MPI.COMM_WORLD
+    world.barrier()
+
+    rab.shutdown()
+    thread.join()
+
+# End of finalize()
+
