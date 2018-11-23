@@ -17,6 +17,7 @@ from cassandra.constants import TAG_REQ, TAG_REQID_BASE
 from mpi4py import MPI
 import concurrent.futures as ft
 import threading
+import logging
 
 # The choice of the sleep length in RAB listener loop is a tradeoff.  Making it
 # shorter improves responsiveness, but creates more waiting in the GIL,
@@ -28,16 +29,16 @@ class RAB(object):
     def __init__(self, cap_tbl, comm=MPI.COMM_WORLD):
         self.cap_tbl = cap_tbl
         self.comm = comm
+        self.rank = comm.Get_rank()
         self.status = 0         # status indicator follows ComponentBase convention
         self.terminate = False   # sentinel indicating when it's time for the RAB to exit
         self.remote_caps = {}   # Table of remote capabilities
-        self.requests_outstanding = {} # Table of requests in process
-        #self.executor = ft.ThreadPoolExecutor() # Manager for RAB worker threads.
+        self.requests_outstanding = {} # Table of requests in process 
 
         # members for managing message tags
         self.taglock = threading.Condition() # Lock for working with the list of tags
-        self.tags = set()                    # MPI message tags in use
-
+        self.tags = set()                    # MPI message tags in use 
+        
     def run(self):
         """Execute the RAB's listen() method in a separate thread."""
         thread = threading.Thread(target=lambda: self.listen())
@@ -48,6 +49,7 @@ class RAB(object):
     def shutdown(self):
         """Order the RAB to exit its listen() thread."""
         # The GIL should take care of any locking that needs to be done here.
+        logging.debug(f'{self.comm.Get_rank()}: shutdown.')
         self.terminate = True
 
     def addremote(self, remote_rank, remote_cap_tbl):
@@ -112,10 +114,14 @@ class RAB(object):
 
         # send both the capability and the tag we will be expecting for the
         # response to the remote RAB
-        data = (capability, reqtag) 
+        data = (capability, reqtag)
+        logging.debug(f'requesting {capability} from {provider_rank} on tag {reqtag}')
         self.comm.send(data, dest=provider_rank, tag=TAG_REQ)
         # wait for the response
-        return self.comm.recv(source=provider_rank, tag=reqtag)
+        logging.debug(f'waiting on {provider_rank} with tag {reqtag}')
+        rslt = self.comm.recv(source=provider_rank, tag=reqtag)
+        logging.debug(f'got {reqtag} from {provider_rank}')
+        return rslt
 
     
     def listen(self):
@@ -142,6 +148,7 @@ class RAB(object):
 
         from time import sleep
         with ft.ThreadPoolExecutor() as self.executor:
+            logging.debug(f'begin listen')
             while True:
                 ### Check for incoming requests.
                 self.process_incoming()
@@ -154,6 +161,7 @@ class RAB(object):
                 ### this and other nodes have finished; therefore, all the
                 ### outstanding requests will have been processed.
                 if self.terminate:
+                    logging.debug('listen loop got request to terminate')
                     assert(len(self.requests_outstanding) == 0)
                     break
 
@@ -161,6 +169,7 @@ class RAB(object):
 
         # Record our status as successful
         self.status = 1
+        logging.debug(f'self.comm.Get_rank(): listen exiting')
         return 0
     
     def process_incoming(self):
@@ -171,6 +180,7 @@ class RAB(object):
         while self.comm.iprobe(tag=TAG_REQ, status=stat):
             source = stat.Get_source()
             capability, rtag = self.comm.recv(source=source)
+            logging.debug(f'{self.rank}: processing {capability} from {source} on tag {rtag}')
 
             # Create a thread to fetch the capability.  This thread might block.
             future = self.executor.submit(self.fetch, capability)
@@ -190,7 +200,8 @@ class RAB(object):
 
         """
 
-        for thread in self.requests_outstanding:
+        threads = list(self.requests_outstanding.keys())
+        for thread in threads:
             if not thread.done():
                 continue
 
@@ -198,9 +209,11 @@ class RAB(object):
                                    # already verified that the thread completed.
 
             source, rtag = self.requests_outstanding.pop(thread)
+            logging.debug(f'sending result to {source} on tag {rtag}')
             # theoretically this could block, but the fetch method on the remote
             # node will have posted a receive as soon as the request was sent.
             self.comm.send(rslt, dest=source, tag=rtag)
+            logging.debug(f'sent {rtag} to {source}')
 
     # End of process_outstanding
 

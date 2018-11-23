@@ -31,6 +31,7 @@ from mpi4py import MPI
 from cassandra.rab import RAB
 from cassandra.constants import TAG_CONFIG, SUPERVISOR_RANK
 from cassandra.compfactory import create_component
+import logging
 
 
 def bootstrap_mp(argvals):
@@ -48,6 +49,8 @@ def bootstrap_mp(argvals):
     world = MPI.COMM_WORLD
     rank = world.Get_rank()
 
+    logging.basicConfig(filename=f'logs/cassandra-{rank}.log', level=logging.DEBUG)
+    
     if rank == SUPERVISOR_RANK:
         my_assignment = distribute_assignments_supervisor(argvals)
     else:
@@ -60,9 +63,7 @@ def bootstrap_mp(argvals):
     cap_tbl = {}
     rab = RAB(cap_tbl, world)
     comps = [rab]
-    #### XXX DEBUG
-    print(f'rank: {rank} assignments: {my_assignment}\n')
-    #### XXX END DEBUG
+    logging.debug(f'rank: {rank} assignments: {my_assignment}\n')
     for section, conf in my_assignment.items():
         component = create_component(section, cap_tbl)
         component.params.update(conf)
@@ -77,9 +78,7 @@ def bootstrap_mp(argvals):
     # the names of the capabilities it contains.)
     capabilities = list(cap_tbl.keys())
     capabilities.remove('general')
-    #### XXX DEBUG
-    print(f'rank {rank} capabilities: ', list(cap_tbl.keys()))
-    #### XXX END DEBUG
+    logging.debug(f'rank {rank} capabilities:  {list(cap_tbl.keys())}')
     allcaptbls = world.allgather(capabilities)
 
     for i, remote_cap in enumerate(allcaptbls):
@@ -162,23 +161,16 @@ def distribute_assignments_supervisor(argvals):
     for i in range(nproc):
         assignments.append({'Global':config['Global']})
     for section in section_names:
-        #### XXX DEBUG
-        print(f'assigning section {section} to rank {nextrank}')
-        #### XXX END DEBUG
         assignments[nextrank][section] = config[section]
         nextrank = (nextrank+1)%nproc
 
     # Distribute these assignments to the workers
     for r in range(nproc):
         if r != SUPERVISOR_RANK:
-            #### XXX DEBUG
-            print(f'sending assignment to rank {r}: {assignments[r]}')
-            #### XXX END DEBUG
+            logging.debug(f'sending assignment to rank {r}: {assignments[r]}')
             world.send(assignments[r], dest=r, tag=TAG_CONFIG)
 
-    #### XXX DEBUG
-    print(f'supervisor assignment: {assignments[SUPERVISOR_RANK]}')
-    #### XXX END DEBUG
+    logging.debug(f'supervisor assignment: {assignments[SUPERVISOR_RANK]}')
     return assignments[SUPERVISOR_RANK]
 
     
@@ -197,6 +189,8 @@ def finalize(rab, thread):
     RABs and exit.
     """
 
+    logging.debug(f'{rab.comm.Get_rank()} entering finalize.')
+    
     rab.comm.barrier()
 
     rab.shutdown()
