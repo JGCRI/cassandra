@@ -13,10 +13,16 @@ which will have the side effect of trying to initialize MPI if mp.py hasn't
 already done it.  
 """
 
-from mp.py import TAG_REQ, TAG_DATA
+from cassandra.constants import TAG_REQ, TAG_REQID_BASE
 from mpi4py import MPI
+import concurrent.futures as ft
+import threading
 
-RAB_LOOP_SLEEP = 0.025          # 25 ms
+# The choice of the sleep length in RAB listener loop is a tradeoff.  Making it
+# shorter improves responsiveness, but creates more waiting in the GIL,
+# potentially slowing down threads that are actually running models (especially
+# if those models are implemented in python and running in the same process).  
+RAB_LOOP_SLEEP = 0.05          # 50 ms
 
 class RAB(object):
     def __init__(self, cap_tbl, comm=MPI.COMM_WORLD):
@@ -25,7 +31,12 @@ class RAB(object):
         self.status = 0         # status indicator follows ComponentBase convention
         self.terminate = False   # sentinel indicating when it's time for the RAB to exit
         self.remote_caps = {}   # Table of remote capabilities
-        self.requests_outstanding {} # Table of requests in process
+        self.requests_outstanding = {} # Table of requests in process
+        #self.executor = ft.ThreadPoolExecutor() # Manager for RAB worker threads.
+
+        # members for managing message tags
+        self.taglock = threading.Condition() # Lock for working with the list of tags
+        self.tags = set()                    # MPI message tags in use
 
     def run(self):
         """Execute the RAB's listen() method in a separate thread."""
@@ -47,11 +58,26 @@ class RAB(object):
         """
 
         for cap in remote_cap_tbl:
-            if capability in self.cap_tbl:
+            if cap in self.cap_tbl:
                 raise RuntimeError(f'Duplicate definition of capability {cap}.')
             self.cap_tbl[cap] = self
             self.remote_caps[cap] = remote_rank
-        
+
+            
+    def unique_tag(self):
+        """Get a message tag not already in use by another thread.
+        """
+        # Start with the base value of TAG_REQ, and search forward until we find
+        # one that isn't already in use.  We have to acquire a lock to do this,
+        # in order to avoid a race condition if another thread is trying to get
+        # a tag assignment at the same time.
+        tag = TAG_REQ
+        with self.taglock:
+            while tag in self.tags:
+                tag += 1
+            self.tags.add(tag)
+            return tag 
+
         
     def fetch(self, capability):
         """Fetch a capability from a remote process.
@@ -59,6 +85,14 @@ class RAB(object):
         This method uses blocking sends and receives, so it will automatically
         block the calling thread until the data is available (i.e., without
         having to wait on a condition variable).
+
+        We use MPI message tags to disambiguate multiple requests from different
+        threads on the same node.  By issuing a unique tag for each request, we
+        ensure that the combination of source and tag uniquely identifies a
+        particular request in the system.  Thus, if the responding RAB sends its
+        result back to the source of the request, using the same tag as the one
+        sent with the request, then we can be certain that the result will be
+        delivered to the thread that requested it.
 
         """
 
@@ -73,10 +107,15 @@ class RAB(object):
         if self is not provider:
             return provider.fetch(capability)
             
-        provider_rank = self.remote_caps[capability]
-        self.comm.send(capability, dest=provider_rank, tag=TAG_REQ)
+        provider_rank = self.remote_caps[capability] 
+        reqtag = self.unique_tag() # get a unique tag for the response
+
+        # send both the capability and the tag we will be expecting for the
+        # response to the remote RAB
+        data = (capability, reqtag) 
+        self.comm.send(data, dest=provider_rank, tag=TAG_REQ)
         # wait for the response
-        return self.comm.recv(source=provider_rank, tag=TAG_DATA)
+        return self.comm.recv(source=provider_rank, tag=reqtag)
 
     
     def listen(self):
@@ -102,24 +141,67 @@ class RAB(object):
         """
 
         from time import sleep
-        while True:
-            ### Check for incoming requests.
-            self.process_incoming()
+        with ft.ThreadPoolExecutor() as self.executor:
+            while True:
+                ### Check for incoming requests.
+                self.process_incoming()
 
-            ### Check outstanding requests (the ones we have running)
-            self.process_outstanding()
+                ### Check outstanding requests (the ones we have running)
+                self.process_outstanding()
 
-            ### Check for termination request - note that this can't happen
-            ### until all other components on this and other nodes have
-            ### finished; therefore, all the outstanding requests will have been
-            ### processed.
-            if self.terminate:
-                assert len(self.requests_outstanding) == 0
-                break
+                ### Check for termination request.  The barrier in mp.finalize()
+                ### ensures that this can't happen until all other components on
+                ### this and other nodes have finished; therefore, all the
+                ### outstanding requests will have been processed.
+                if self.terminate:
+                    assert(len(self.requests_outstanding) == 0)
+                    break
 
-            sleep(RAB_LOOP_SLEEP)
+                sleep(RAB_LOOP_SLEEP)
 
         # Record our status as successful
         self.status = 1
         return 0
+    
+    def process_incoming(self):
+        """Dispatch incoming requests from other nodes, if any.
+        """
+
+        stat = MPI.Status()
+        while self.comm.iprobe(tag=TAG_REQ, status=stat):
+            source = stat.Get_source()
+            capability, rtag = self.comm.recv(source=source)
+
+            # Create a thread to fetch the capability.  This thread might block.
+            future = self.executor.submit(self.fetch, capability)
+            
+            # Add the source and the remote tag to the table, indexed by thread.
+            # We don't need the capability anymore, so we don't store it.
+            self.requests_outstanding[future] = (source, rtag)
+
+    # End of process_incoming()
+
+    def process_outstanding(self):
+        """Process any threads that have finished servicing their requests.
+
+        For each thread in the list of outstanding requests, check to see if it
+        has completed.  If so, send the response back to the requestor and
+        remove the thread object from the outstanding requests list.
+
+        """
+
+        for thread in self.requests_outstanding:
+            if not thread.done():
+                continue
+
+            rslt = thread.result() # no need to specify a timeout, since we
+                                   # already verified that the thread completed.
+
+            source, rtag = self.requests_outstanding.pop(thread)
+            # theoretically this could block, but the fetch method on the remote
+            # node will have posted a receive as soon as the request was sent.
+            self.comm.send(rslt, dest=source, tag=rtag)
+
+    # End of process_outstanding
+
     

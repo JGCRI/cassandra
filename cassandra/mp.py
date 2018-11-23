@@ -29,18 +29,11 @@ directory should always work.
 
 from mpi4py import MPI
 from cassandra.rab import RAB
-
-### Constants for MPI tags
-TAG_CONFIG = 100                # configuration distribution method
-TAG_REQ = 102                   # Request data for a capability
-TAG_DATA = 103                  # Response to TAG_REQ
+from cassandra.constants import TAG_CONFIG, SUPERVISOR_RANK
+from cassandra.compfactory import create_component
 
 
-### Other config constants for MPI
-SUPERVISOR_RANK = 0
-
-
-def mp_bootstrap(argvals):
+def bootstrap_mp(argvals):
     """Bootstrap the multiprocessing system.
 
     1. Parse configuration files
@@ -67,6 +60,9 @@ def mp_bootstrap(argvals):
     cap_tbl = {}
     rab = RAB(cap_tbl, world)
     comps = [rab]
+    #### XXX DEBUG
+    print(f'rank: {rank} assignments: {my_assignment}\n')
+    #### XXX END DEBUG
     for section, conf in my_assignment.items():
         component = create_component(section, cap_tbl)
         component.params.update(conf)
@@ -79,7 +75,11 @@ def mp_bootstrap(argvals):
     # all of the capabilities it got from other ranks to its RAB's list of
     # capabilities.  (We don't actually send the whole capability table, just
     # the names of the capabilities it contains.)
-    capabilities = list(cap_tbl.keys()).remove('Global')
+    capabilities = list(cap_tbl.keys())
+    capabilities.remove('general')
+    #### XXX DEBUG
+    print(f'rank {rank} capabilities: ', list(cap_tbl.keys()))
+    #### XXX END DEBUG
     allcaptbls = world.allgather(capabilities)
 
     for i, remote_cap in enumerate(allcaptbls):
@@ -110,7 +110,8 @@ def distribute_assignments_worker(argvals):
     """
 
     world = MPI.COMM_WORLD
-    return world.recv(source=SUPERVISOR_RANK, tag=TAG_CONFIG)
+    assignments = world.recv(source=SUPERVISOR_RANK, tag=TAG_CONFIG)
+    return assignments
 
 
 def distribute_assignments_supervisor(argvals):
@@ -137,9 +138,8 @@ def distribute_assignments_supervisor(argvals):
     """
 
     from configobj import ConfigObj
-    from cassandra.compfactory import create_component
 
-    config = ConfigObj(argvals.ctlfle)
+    config = ConfigObj(argvals.ctlfile)
 
     # Get list of section names 
     section_names = list(config.keys())
@@ -157,17 +157,28 @@ def distribute_assignments_supervisor(argvals):
     world = MPI.COMM_WORLD
     nproc = world.Get_size()
     nextrank = (SUPERVISOR_RANK+1) % nproc
-    
-    assignments = [{'Global':config['Global']}] * nproc
+
+    assignments = []
+    for i in range(nproc):
+        assignments.append({'Global':config['Global']})
     for section in section_names:
+        #### XXX DEBUG
+        print(f'assigning section {section} to rank {nextrank}')
+        #### XXX END DEBUG
         assignments[nextrank][section] = config[section]
-        nextrank += 1
+        nextrank = (nextrank+1)%nproc
 
     # Distribute these assignments to the workers
     for r in range(nproc):
         if r != SUPERVISOR_RANK:
+            #### XXX DEBUG
+            print(f'sending assignment to rank {r}: {assignments[r]}')
+            #### XXX END DEBUG
             world.send(assignments[r], dest=r, tag=TAG_CONFIG)
 
+    #### XXX DEBUG
+    print(f'supervisor assignment: {assignments[SUPERVISOR_RANK]}')
+    #### XXX END DEBUG
     return assignments[SUPERVISOR_RANK]
 
     
@@ -186,8 +197,7 @@ def finalize(rab, thread):
     RABs and exit.
     """
 
-    world = MPI.COMM_WORLD
-    world.barrier()
+    rab.comm.barrier()
 
     rab.shutdown()
     thread.join()
