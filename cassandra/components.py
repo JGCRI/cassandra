@@ -619,8 +619,11 @@ class DummyComponent(ComponentBase):
     def run_component(self):
         """Run, request, delay, output."""
         from time import time, sleep
+        from logging import info
+        from os import uname
 
         st = time()
+        info(f'{st}: Start component on host {uname().nodename}')
         st_msg = (0, f'Start {self.name}')
 
         data = [st_msg]  # list of tuples: (time, message)
