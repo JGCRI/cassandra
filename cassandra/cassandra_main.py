@@ -34,7 +34,6 @@ def bootstrap_sp(cfgfile_name):
     component_list = []
 
     # cfgfile_name is a filename
-    # cfgfile_name is a filename
     config = ConfigObj(cfgfile_name)
 
     try:
@@ -69,8 +68,7 @@ if __name__ == "__main__":
     else:
         (component_list, cap_table) = bootstrap_sp(argvals.ctlfile)
 
-
-    # We will look up "global" in the cap_table and process any
+    # We will look up "general" in the cap_table and process any
     # global parameters here, but in the current version we don't
     # have any global parameters to process, so skip it.
 
@@ -88,7 +86,7 @@ if __name__ == "__main__":
     else:
         # No RAB in a single-node calculation
         component_threads = threads
-        
+
     for thread in component_threads:
         thread.join()
 
@@ -96,7 +94,7 @@ if __name__ == "__main__":
     # perform the finalization procedure
     if argvals.mp:
         finalize(component_list[0], threads[0])
-        
+
     # Check to see if any of the components failed
     fail = 0
     for component in component_list:
