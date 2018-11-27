@@ -525,8 +525,8 @@ class GcamComponent(ComponentBase):
                 return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf, cwd=self.workdir)
 
 
-class TethysComponent(ComponentBase):
-    """Class for the global water withdrawal downscaling model Tethys.
+class WaterDownscalingComponent(ComponentBase):
+    """Class for a global water withdrawal downscaling model.
 
     This component makes use of the Tethys package, an open-source
     spatiotemporal water use downscaling model.
@@ -539,11 +539,10 @@ class TethysComponent(ComponentBase):
 
     def __init__(self, cap_tbl):
         super(TethysComponent, self).__init__(cap_tbl)
-        self.addcapability("tethys_gis")
-        self.addcapability("tethys_gridded")
+        self.addcapability("water_downscaling")
 
     def run_component(self):
-        """Run Tethys."""
+        """Run the water withdrawal downscaling model."""
         from tethys.model import Tethys
 
         config_file = self.params["config_file"]
@@ -551,8 +550,7 @@ class TethysComponent(ComponentBase):
         # run the Tethys model
         tethys_results = Tethys(config=config_file)
 
-        self.addresults("tethys_gis", tethys_results.gis_data)
-        self.addresults("tethys_gridded", tethys_results.gridded_data)
+        self.addresults("water_downscaling", tethys_results)
 
         return 0
 
