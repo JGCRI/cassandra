@@ -550,7 +550,7 @@ class XanthosComponent(ComponentBase):
 
         args = {}
 
-        # Wait for fldgen to produce precipitation and temp data
+        # Wait for fldgen to produce precipitation and temp data (as pandas DataFrames)
         fldgen_pr = self.fetch('fldgen_pr')
         fldgen_tas = self.fetch('fldgen_tas')
 
