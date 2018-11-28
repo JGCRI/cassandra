@@ -1,5 +1,7 @@
 # Cassandra Model Coupling Framework
 
+[![Build Status]( https://travis-ci.org/JGCRI/cassandra.svg?branch=master)](https://travis-ci.org/JGCRI/cassandra)
+
 Cassandra is a coupling framework for scientific models that tracks
 model dependencies and automates the running of multiple
 interconnected models.
