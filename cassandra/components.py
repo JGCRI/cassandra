@@ -533,7 +533,7 @@ class TethysComponent(ComponentBase):
     """Class for the global water withdrawal downscaling model Tethys.
 
     This component makes use of the Tethys package, an open-source
-    spatiotemporal water use downscaling model.
+    spatiotemporal water demand downscaling model.
 
     The results are global annual gridded water withdrawal by sector,
     providing a capability for each Tethys output sector. Units are
@@ -551,27 +551,42 @@ class TethysComponent(ComponentBase):
         super(TethysComponent, self).__init__(cap_tbl)
 
         # Map the capability name to the corresponding Tethys result
-        self.spatial_sectors = {
-            "gridded_water_demand_dom": "wddom",    # Domestic
-            "gridded_water_demand_elec": "wdelec",   # Electricity Generation
-            "gridded_water_demand_irr": "wdirr",    # Irrigation
-            "gridded_water_demand_liv": "wdliv",    # Livestock
-            "gridded_water_demand_mfg": "wdmfg",    # Manufacturing
-            "gridded_water_demand_min": "wdmin",    # Mining
+        self.capability_map = {
+            "gridded_water_demand_dom": "wddom",      # Domestic
+            "gridded_water_demand_elec": "wdelec",    # Electricity Generation
+            "gridded_water_demand_irr": "wdirr",      # Irrigation
+            "gridded_water_demand_liv": "wdliv",      # Livestock
+            "gridded_water_demand_mfg": "wdmfg",      # Manufacturing
+            "gridded_water_demand_min": "wdmin",      # Mining
             "gridded_water_demand_nonag": "wdnonag",  # Non-Agricultural
             "gridded_water_demand_total": "wdtotal"   # Total
         }
         self.temporal_sectors = {
-            "gridded_monthly_water_demand_dom": "twddom",   # Domestic
+            "gridded_monthly_water_demand_dom": "twddom",    # Domestic
             "gridded_monthly_water_demand_elec": "twdelec",  # Electricity Generation
-            "gridded_monthly_water_demand_irr": "twdirr",   # Irrigation
-            "gridded_monthly_water_demand_liv": "twdliv",   # Livestock
-            "gridded_monthly_water_demand_mfg": "twdmfg",   # Manufacturing
-            "gridded_monthly_water_demand_min": "twdmin",   # Mining
+            "gridded_monthly_water_demand_irr": "twdirr",    # Irrigation
+            "gridded_monthly_water_demand_liv": "twdliv",    # Livestock
+            "gridded_monthly_water_demand_mfg": "twdmfg",    # Manufacturing
+            "gridded_monthly_water_demand_min": "twdmin",    # Mining
         }
 
-        for ss in self.spatial_sectors.keys():
-            self.addcapability(ss)
+        for cap in self.capability_map.keys():
+            self.addcapability(cap)
+
+    def finalize_parsing(self):
+        super(TethysComponent, self).finalize_parsing()
+
+        # Check if Tethys is running with temporal downscaling (an optional output)
+        from configobj import ConfigObj
+
+        tethys_config = ConfigObj(self.params['config_file'])
+        temporal_downscaling = tethys_config['Project']['PerformTemporal']
+
+        # If it is, add the temporal downscaling capabilities
+        if temporal_downscaling:
+            for cap in self.temporal_sectors.keys():
+                self.addcapability(cap)
+            self.capability_map.update(self.temporal_sectors)
 
     def run_component(self):
         """Run Tethys."""
@@ -582,14 +597,8 @@ class TethysComponent(ComponentBase):
         # run the Tethys model
         tethys_results = Tethys(config=config_file)
 
-        for capability_name, tethys_attr in self.spatial_sectors.items():
+        for capability_name, tethys_attr in self.capability_map.items():
             self.addresults(capability_name, getattr(tethys_results.gridded_data, tethys_attr))
-
-        # Temporal downscaling is optional
-        if tethys_results.settings.PerformTemporal:
-            for capability_name, tethys_attr in self.temporal_sectors.items():
-                self.addcapability(capability_name)
-                self.addresults(capability_name, getattr(tethys_results.gridded_data, tethys_attr))
 
         return 0
 
