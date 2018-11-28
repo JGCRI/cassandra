@@ -529,11 +529,17 @@ class GcamComponent(ComponentBase):
                 return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf, cwd=self.workdir)
 
 
-class WaterDownscalingComponent(ComponentBase):
-    """Class for a global water withdrawal downscaling model.
+class TethysComponent(ComponentBase):
+    """Class for the global water withdrawal downscaling model Tethys.
 
     This component makes use of the Tethys package, an open-source
     spatiotemporal water use downscaling model.
+
+    The results are global annual gridded water withdrawal by sector,
+    providing a capability for each Tethys output sector. Units are
+    specified by the Tethys configuration file. If Tethys is set up to
+    run with temporal downscaling, additional capabilities for monthly
+    results will be available.
 
     For more information: https://github.com/JGCRI/tethys
 
@@ -543,10 +549,32 @@ class WaterDownscalingComponent(ComponentBase):
 
     def __init__(self, cap_tbl):
         super(TethysComponent, self).__init__(cap_tbl)
-        self.addcapability("water_downscaling")
+
+        # Map the capability name to the corresponding Tethys result
+        self.spatial_sectors = {
+            "gridded_water_demand_dom": "wddom",    # Domestic
+            "gridded_water_demand_elec": "wdelec",   # Electricity Generation
+            "gridded_water_demand_irr": "wdirr",    # Irrigation
+            "gridded_water_demand_liv": "wdliv",    # Livestock
+            "gridded_water_demand_mfg": "wdmfg",    # Manufacturing
+            "gridded_water_demand_min": "wdmin",    # Mining
+            "gridded_water_demand_nonag": "wdnonag",  # Non-Agricultural
+            "gridded_water_demand_total": "wdtotal"   # Total
+        }
+        self.temporal_sectors = {
+            "gridded_monthly_water_demand_dom": "twddom",   # Domestic
+            "gridded_monthly_water_demand_elec": "twdelec",  # Electricity Generation
+            "gridded_monthly_water_demand_irr": "twdirr",   # Irrigation
+            "gridded_monthly_water_demand_liv": "twdliv",   # Livestock
+            "gridded_monthly_water_demand_mfg": "twdmfg",   # Manufacturing
+            "gridded_monthly_water_demand_min": "twdmin",   # Mining
+        }
+
+        for ss in self.spatial_sectors.keys():
+            self.addcapability(ss)
 
     def run_component(self):
-        """Run the water withdrawal downscaling model."""
+        """Run Tethys."""
         from tethys.model import Tethys
 
         config_file = self.params["config_file"]
@@ -554,7 +582,14 @@ class WaterDownscalingComponent(ComponentBase):
         # run the Tethys model
         tethys_results = Tethys(config=config_file)
 
-        self.addresults("water_downscaling", tethys_results)
+        for capability_name, tethys_attr in self.spatial_sectors.items():
+            self.addresults(capability_name, getattr(tethys_results.gridded_data, tethys_attr))
+
+        # Temporal downscaling is optional
+        if tethys_results.settings.PerformTemporal:
+            for capability_name, tethys_attr in self.temporal_sectors.items():
+                self.addcapability(capability_name)
+                self.addresults(capability_name, getattr(tethys_results.gridded_data, tethys_attr))
 
         return 0
 
