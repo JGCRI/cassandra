@@ -617,38 +617,64 @@ class XanthosComponent(ComponentBase):
 
     def __init__(self, cap_tbl):
         super(XanthosComponent, self).__init__(cap_tbl)
-        self.addcapability("xanthos")
+        self.addcapability("gridded_runoff")
+
+    def finalize_parsing(self):
+        """Load the reference file mapping Xanthos cell index to lat/lon."""
+        super(XanthosComponent, self).finalize_parsing()
+
+        from configobj import ConfigObj
+        import pandas as pd
+
+        xanthos_config = ConfigObj(self.params['config_file'])
+        root_dir = xanthos_config['Project']['RootDir']
+        in_dir = xanthos_config['Project']['InputFolder']
+        ref_dir = xanthos_config['Project']['RefDir']
+
+        cell_map_path = os.path.join(root_dir, in_dir, ref_dir, 'coordinates.csv')
+        xcolnames = ['cell_id', 'lon', 'lat', 'lon_idx', 'lat_idx']
+
+        self.cell_map = pd.read_csv(cell_map_path, names=xcolnames)
 
     def run_component(self):
         """Run Xanthos."""
         import xanthos
-        import pandas as pd
 
         config_file = self.params["config_file"]
-        workdir = self.params["workdir"]
 
         xth = xanthos.Xanthos(config_file)
 
         args = {}
 
-        # Wait for fldgen to produce precipitation and temp data (as pandas DataFrames)
-        fldgen_pr = self.fetch('fldgen_pr')
-        fldgen_tas = self.fetch('fldgen_tas')
-
-        assert fldgen_pr['units'] == 'mm_month-1'
-        assert fldgen_tas['units'] == 'C'
-
-        args['PrecipitationFile'] = self.prep_for_xanthos(workdir, fldgen_pr)
-        args['trn_tas'] = self.prep_for_xanthos(workdir, fldgen_tas)
+        # Wait for other components to produce precipitation and
+        # temperature data (as pandas DataFrames), if provided
+        self.add_args_from_capability(args, 'PrecipitationFile', 'gridded_pr', 'mm_month-1')
+        self.add_args_from_capability(args, 'trn_tas', 'gridded_tas', 'C')
 
         xth_results = xth.execute(args)
 
-        # Add runoff (Q) results from xanthos to the xanthos capability
-        self.addresults("xanthos", xth_results.Q)
+        # Add runoff (Q) results from xanthos to the gridded_runoff capability
+        self.addresults("gridded_runoff", xth_results.Q)
 
         return 0
 
-    def prep_for_xanthos(self, xanthos_dir, monthly_data):
+    def add_args_from_capability(self, args, arg_name, cap_name, units=None):
+        """Get Xanthos parameters from another capability.
+
+        If the no component provides the requested capability, no arguments are added.
+
+        params:
+          args: Reference to dictionary passed to Xanthos
+          arg_name: Name of argument to add
+          cap_name: Name of capability with required value
+          units: Optional string to use to assert correct units
+        """
+        if cap_name in self.cap_tbl:
+            arg_val = self.fetch(cap_name)
+            assert units is None or arg_val['units'] == units
+            args[arg_name] = self.prep_for_xanthos(arg_val)
+
+    def prep_for_xanthos(self, monthly_data):
         """Convert a fldgen output array to Xanthos' expected input format.
 
         Retrieve Xanthos grid cells from alternately indexed vectors.
@@ -657,28 +683,16 @@ class XanthosComponent(ComponentBase):
         month) to the input format expected by Xanthos (land cell x months).
 
         params:
-          xanthos_dir: Full file path to xanthos input/output directory
           monthly_data: Input data for xanthos as numpy array (cells x months)
 
         returns:
           2d array of Xanthos cells by month
 
         """
-
-        # Load reference file mapping Xanthos cell index to lat/lon
-        xcells_path = os.path.join(xanthos_dir, 'input/reference/coordinates.csv')
-        if not os.path.exists(xcells_path):
-            raise IOError('Invalid path to Xanthos directory')
-
-        xcolnames = ['cell_id', 'lon', 'lat', 'lon_idx', 'lat_idx']
-        xcells = pd.read_csv(xcells_path, names=xcolnames)
-
         ycolnames = c('index', 'lat', 'lon')
         ycells = pd.DataFrame(monthly_data['data'].T, columns=ycolnames)
 
-        # stopifnot(nrow(ycells) == nrow(xcells))
-
-        bothcells = ycells.merge(xcells, on=['lat', 'lon'])
+        bothcells = ycells.merge(self.cell_map, on=['lat', 'lon'])
 
         # Order by Xanthos cell id for indexing
         bothcells.sort_values(by='cell_id', inplace=True)
@@ -707,8 +721,8 @@ class FldgenComponent(ComponentBase):
 
     def __init__(self, cap_tbl):
         super(FldgenComponent, self).__init__(cap_tbl)
-        self.addcapability("fldgen_pr")
-        self.addcapability("fldgen_tas")
+        self.addcapability("gridded_pr")
+        self.addcapability("gridded_tas")
 
     def run_component(self):
         """Run the fldgen R scripts."""
@@ -769,8 +783,8 @@ class FldgenComponent(ComponentBase):
             'units': run_N[1][2][0]
         }
 
-        self.addresults('fldgen_pr', fldgen_pr)
-        self.addresults('fldgen_tas', fldgen_tas)
+        self.addresults('gridded_pr', fldgen_pr)
+        self.addresults('gridded_tas', fldgen_tas)
 
         return 0
 
