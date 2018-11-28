@@ -20,6 +20,9 @@ GlobalParamsComponent - Store parameters common to all components.
 
 GcamComponent         - Run the GCAM core model.
 
+TethysComponent       - Run the Tethys spatiotemporal global water use
+                        downscaling model.
+
 XanthosComponent      - Run the Xanthos global hydrology model.
 
 DummyComponent        - A simple component class for tests.
@@ -102,10 +105,11 @@ class ComponentBase(object):
 
     __init__(): initialization, obviously, but each init method must
                 take an extra argument that is a dictionary of component
-                capabilities, and it must add its own capabilities to
-                this dictionary (see components below for examples).
+                capabilities.
                 The base class init stores a reference to the
-                capability table for future lookup.
+                capability table for future lookup.  A component may
+                optionally call addcapability() here to add
+                capabilities that are independent of any parameters.
 
     finalize_parsing(): When parsing is complete, what you have is a
                 bunch of key-value pairs.  This function is the place
@@ -113,7 +117,10 @@ class ComponentBase(object):
                 converting strings to other types).  The base class
                 version of the method does this for parameters that
                 are applicable to all components, so it must always be
-                called if the method is overridden.
+                called if the method is overridden.  A component may
+                also call addcapability() from this method to add
+                capabilities that depend on the component's
+                parameters.
 
     Methods that can be overridden freely
 
@@ -414,7 +421,7 @@ class GcamComponent(ComponentBase):
     Results:
       dbxml      = gcam dbxml output file.  We get this from the gcam config.xml file.
 
-    Component dependences: none
+    Component dependencies: none
 
     """
 
@@ -520,6 +527,80 @@ class GcamComponent(ComponentBase):
         else:
             with open(logfile, "w") as lf:
                 return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf, cwd=self.workdir)
+
+
+class TethysComponent(ComponentBase):
+    """Class for the global water withdrawal downscaling model Tethys.
+
+    This component makes use of the Tethys package, an open-source
+    spatiotemporal water demand downscaling model.
+
+    The results are global annual gridded water withdrawal by sector,
+    providing a capability for each Tethys output sector. Units are
+    specified by the Tethys configuration file. If Tethys is set up to
+    run with temporal downscaling, additional capabilities for monthly
+    results will be available.
+
+    For more information: https://github.com/JGCRI/tethys
+
+    params:
+       config_file - path to Tethys config file
+    """
+
+    def __init__(self, cap_tbl):
+        super(TethysComponent, self).__init__(cap_tbl)
+
+        # Map the capability name to the corresponding Tethys result
+        self.capability_map = {
+            "gridded_water_demand_dom": "wddom",      # Domestic
+            "gridded_water_demand_elec": "wdelec",    # Electricity Generation
+            "gridded_water_demand_irr": "wdirr",      # Irrigation
+            "gridded_water_demand_liv": "wdliv",      # Livestock
+            "gridded_water_demand_mfg": "wdmfg",      # Manufacturing
+            "gridded_water_demand_min": "wdmin",      # Mining
+            "gridded_water_demand_nonag": "wdnonag",  # Non-Agricultural
+            "gridded_water_demand_total": "wdtotal"   # Total
+        }
+        self.temporal_sectors = {
+            "gridded_monthly_water_demand_dom": "twddom",    # Domestic
+            "gridded_monthly_water_demand_elec": "twdelec",  # Electricity Generation
+            "gridded_monthly_water_demand_irr": "twdirr",    # Irrigation
+            "gridded_monthly_water_demand_liv": "twdliv",    # Livestock
+            "gridded_monthly_water_demand_mfg": "twdmfg",    # Manufacturing
+            "gridded_monthly_water_demand_min": "twdmin",    # Mining
+        }
+
+        for cap in self.capability_map.keys():
+            self.addcapability(cap)
+
+    def finalize_parsing(self):
+        super(TethysComponent, self).finalize_parsing()
+
+        # Check if Tethys is running with temporal downscaling (an optional output)
+        from configobj import ConfigObj
+
+        tethys_config = ConfigObj(self.params['config_file'])
+        temporal_downscaling = tethys_config['Project']['PerformTemporal']
+
+        # If it is, add the temporal downscaling capabilities
+        if temporal_downscaling:
+            for cap in self.temporal_sectors.keys():
+                self.addcapability(cap)
+            self.capability_map.update(self.temporal_sectors)
+
+    def run_component(self):
+        """Run Tethys."""
+        from tethys.model import Tethys
+
+        config_file = self.params["config_file"]
+
+        # run the Tethys model
+        tethys_results = Tethys(config=config_file)
+
+        for capability_name, tethys_attr in self.capability_map.items():
+            self.addresults(capability_name, getattr(tethys_results.gridded_data, tethys_attr))
+
+        return 0
 
 
 class XanthosComponent(ComponentBase):
@@ -752,8 +833,11 @@ class DummyComponent(ComponentBase):
     def run_component(self):
         """Run, request, delay, output."""
         from time import time, sleep
+        from logging import info
+        from os import uname
 
         st = time()
+        info(f'{st}: Start component on host {uname().nodename}')
         st_msg = (0, f'Start {self.name}')
 
         data = [st_msg]  # list of tuples: (time, message)
@@ -780,5 +864,5 @@ class DummyComponent(ComponentBase):
         return 0
 
     def report_test_results(self):
-        """Report the component's results to the unit testing code"""
+        """Report the component's results to the unit testing code."""
         return self.results[self.name]
