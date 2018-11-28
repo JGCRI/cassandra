@@ -20,6 +20,9 @@ GlobalParamsComponent - Store parameters common to all components.
 
 GcamComponent         - Run the GCAM core model.
 
+TethysComponent       - Run the Tethys spatiotemporal global water use
+                        downscaling model.
+
 XanthosComponent      - Run the Xanthos global hydrology model.
 
 DummyComponent        - A simple component class for tests.
@@ -418,7 +421,7 @@ class GcamComponent(ComponentBase):
     Results:
       dbxml      = gcam dbxml output file.  We get this from the gcam config.xml file.
 
-    Component dependences: none
+    Component dependencies: none
 
     """
 
@@ -526,6 +529,80 @@ class GcamComponent(ComponentBase):
                 return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], stdout=lf, cwd=self.workdir)
 
 
+class TethysComponent(ComponentBase):
+    """Class for the global water withdrawal downscaling model Tethys.
+
+    This component makes use of the Tethys package, an open-source
+    spatiotemporal water demand downscaling model.
+
+    The results are global annual gridded water withdrawal by sector,
+    providing a capability for each Tethys output sector. Units are
+    specified by the Tethys configuration file. If Tethys is set up to
+    run with temporal downscaling, additional capabilities for monthly
+    results will be available.
+
+    For more information: https://github.com/JGCRI/tethys
+
+    params:
+       config_file - path to Tethys config file
+    """
+
+    def __init__(self, cap_tbl):
+        super(TethysComponent, self).__init__(cap_tbl)
+
+        # Map the capability name to the corresponding Tethys result
+        self.capability_map = {
+            "gridded_water_demand_dom": "wddom",      # Domestic
+            "gridded_water_demand_elec": "wdelec",    # Electricity Generation
+            "gridded_water_demand_irr": "wdirr",      # Irrigation
+            "gridded_water_demand_liv": "wdliv",      # Livestock
+            "gridded_water_demand_mfg": "wdmfg",      # Manufacturing
+            "gridded_water_demand_min": "wdmin",      # Mining
+            "gridded_water_demand_nonag": "wdnonag",  # Non-Agricultural
+            "gridded_water_demand_total": "wdtotal"   # Total
+        }
+        self.temporal_sectors = {
+            "gridded_monthly_water_demand_dom": "twddom",    # Domestic
+            "gridded_monthly_water_demand_elec": "twdelec",  # Electricity Generation
+            "gridded_monthly_water_demand_irr": "twdirr",    # Irrigation
+            "gridded_monthly_water_demand_liv": "twdliv",    # Livestock
+            "gridded_monthly_water_demand_mfg": "twdmfg",    # Manufacturing
+            "gridded_monthly_water_demand_min": "twdmin",    # Mining
+        }
+
+        for cap in self.capability_map.keys():
+            self.addcapability(cap)
+
+    def finalize_parsing(self):
+        super(TethysComponent, self).finalize_parsing()
+
+        # Check if Tethys is running with temporal downscaling (an optional output)
+        from configobj import ConfigObj
+
+        tethys_config = ConfigObj(self.params['config_file'])
+        temporal_downscaling = tethys_config['Project']['PerformTemporal']
+
+        # If it is, add the temporal downscaling capabilities
+        if temporal_downscaling:
+            for cap in self.temporal_sectors.keys():
+                self.addcapability(cap)
+            self.capability_map.update(self.temporal_sectors)
+
+    def run_component(self):
+        """Run Tethys."""
+        from tethys.model import Tethys
+
+        config_file = self.params["config_file"]
+
+        # run the Tethys model
+        tethys_results = Tethys(config=config_file)
+
+        for capability_name, tethys_attr in self.capability_map.items():
+            self.addresults(capability_name, getattr(tethys_results.gridded_data, tethys_attr))
+
+        return 0
+
+
 class XanthosComponent(ComponentBase):
     """Class for the global hydrologic model Xanthos
 
@@ -588,7 +665,7 @@ class DummyComponent(ComponentBase):
         # most components add a capability here, but we can't do that
         # yet because we need our parameters before we can decide what
         # capability we are offering.
-        
+
     def finalize_parsing(self):
         super(DummyComponent, self).finalize_parsing()
 
@@ -600,7 +677,7 @@ class DummyComponent(ComponentBase):
         if 'capability_reqs' in self.params:
             cr = self.params['capability_reqs']
             if not isinstance(cr, list):
-                cr = [cr] 
+                cr = [cr]
             self.capability_reqs = [s for s in cr if s != '']
         else:
             self.capability_reqs = []
@@ -654,5 +731,5 @@ class DummyComponent(ComponentBase):
         return 0
 
     def report_test_results(self):
-        """Report the component's results to the unit testing code"""
+        """Report the component's results to the unit testing code."""
         return self.results[self.name]

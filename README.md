@@ -1,5 +1,7 @@
 # Cassandra Model Coupling Framework
 
+[![Build Status]( https://travis-ci.org/JGCRI/cassandra.svg?branch=master)](https://travis-ci.org/JGCRI/cassandra)
+
 Cassandra is a coupling framework for scientific models that tracks
 model dependencies and automates the running of multiple
 interconnected models.
@@ -13,7 +15,7 @@ assumes that
 1. Model coupling is one-way.  That is, if a model _A_ depends on
    another model _B_, then _B_ must not use, directly or
    indirectly, any data from _A_.  
-   
+
    Future developments will relax this requirement to apply
    only within a single time step, so that in the example above, _B_
    could use data from previous time steps of _A_, so long as it did
