@@ -34,7 +34,6 @@ def bootstrap_sp(cfgfile_name):
     component_list = []
 
     # cfgfile_name is a filename
-    # cfgfile_name is a filename
     config = ConfigObj(cfgfile_name)
 
     try:
@@ -63,15 +62,13 @@ if __name__ == "__main__":
     argvals = parser.parse_args()
 
     if argvals.mp:
-        raise NotImplementedError('Multiprocessing is not yet implemented.')
-
-    try:
+        # See notes in mp.py about side effects of importing that module.
+        from cassandra.mp import bootstrap_mp, finalize
+        (component_list, cap_table) = bootstrap_mp(argvals)
+    else:
         (component_list, cap_table) = bootstrap_sp(argvals.ctlfile)
-    except IndexError:
-        print(__doc__)
-        sys.exit(0)
 
-    # We will look up "global" in the cap_table and process any
+    # We will look up "general" in the cap_table and process any
     # global parameters here, but in the current version we don't
     # have any global parameters to process, so skip it.
 
@@ -81,9 +78,22 @@ if __name__ == "__main__":
         print(f"running {str(component.__class__)}")
         threads.append(component.run())
 
-    # Wait for all threads to complete before printing end message.
-    for thread in threads:
+    # Wait for all component threads to complete before printing end
+    # message.
+    if argvals.mp:
+        # The RAB thread will always be first in the thread list
+        component_threads = threads[1:]
+    else:
+        # No RAB in a single-node calculation
+        component_threads = threads
+
+    for thread in component_threads:
         thread.join()
+
+    # If this is a multiprocessing calculation, then we need to
+    # perform the finalization procedure
+    if argvals.mp:
+        finalize(component_list[0], threads[0])
 
     # Check to see if any of the components failed
     fail = 0

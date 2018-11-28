@@ -105,10 +105,11 @@ class ComponentBase(object):
 
     __init__(): initialization, obviously, but each init method must
                 take an extra argument that is a dictionary of component
-                capabilities, and it must add its own capabilities to
-                this dictionary (see components below for examples).
+                capabilities.
                 The base class init stores a reference to the
-                capability table for future lookup.
+                capability table for future lookup.  A component may
+                optionally call addcapability() here to add
+                capabilities that are independent of any parameters.
 
     finalize_parsing(): When parsing is complete, what you have is a
                 bunch of key-value pairs.  This function is the place
@@ -116,7 +117,10 @@ class ComponentBase(object):
                 converting strings to other types).  The base class
                 version of the method does this for parameters that
                 are applicable to all components, so it must always be
-                called if the method is overridden.
+                called if the method is overridden.  A component may
+                also call addcapability() from this method to add
+                capabilities that depend on the component's
+                parameters.
 
     Methods that can be overridden freely
 
@@ -652,8 +656,11 @@ class DummyComponent(ComponentBase):
     def run_component(self):
         """Run, request, delay, output."""
         from time import time, sleep
+        from logging import info
+        from os import uname
 
         st = time()
+        info(f'{st}: Start component on host {uname().nodename}')
         st_msg = (0, f'Start {self.name}')
 
         data = [st_msg]  # list of tuples: (time, message)
