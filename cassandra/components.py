@@ -617,7 +617,24 @@ class XanthosComponent(ComponentBase):
 
     def __init__(self, cap_tbl):
         super(XanthosComponent, self).__init__(cap_tbl)
-        self.addcapability("xanthos")
+        self.addcapability("gridded_runoff")
+
+    def finalize_parsing(self):
+        """Load the reference file mapping Xanthos cell index to lat/lon."""
+        super(XanthosComponent, self).finalize_parsing()
+
+        from configobj import ConfigObj
+        import pandas as pd
+
+        xanthos_config = ConfigObj(self.params['config_file'])
+        root_dir = xanthos_config['Project']['RootDir']
+        in_dir = xanthos_config['Project']['InputFolder']
+        ref_dir = xanthos_config['Project']['RefDir']
+
+        cell_map_path = os.path.join(root_dir, in_dir, ref_dir, 'coordinates.csv')
+        xcolnames = ['cell_id', 'lon', 'lat', 'lon_idx', 'lat_idx']
+
+        self.cell_map = pd.read_csv(cell_map_path, names=xcolnames)
 
     def run_component(self):
         """Run Xanthos."""
@@ -628,16 +645,143 @@ class XanthosComponent(ComponentBase):
         xth = xanthos.Xanthos(config_file)
 
         args = {}
-        # Eventually we will add a fetch call to get precipitation and temp data
-        # from another component:
-        #
-        # args['PrecipitationFile'] = self.cap_tbl['fldgen_pr'].fetch()
-        # args['trn_tas'] = self.cap_tbl['fldgen_tas'].fetch()
+
+        # Wait for other components to produce precipitation and
+        # temperature data (as pandas DataFrames), if provided
+        self.add_args_from_capability(args, 'PrecipitationFile', 'gridded_pr', 'mm_month-1')
+        self.add_args_from_capability(args, 'trn_tas', 'gridded_tas', 'C')
 
         xth_results = xth.execute(args)
 
-        # Add runoff (Q) results from xanthos to the xanthos capability
-        self.addresults("xanthos", xth_results.Q)
+        # Add runoff (Q) results from xanthos to the gridded_runoff capability
+        self.addresults("gridded_runoff", xth_results.Q)
+
+        return 0
+
+    def add_args_from_capability(self, args, arg_name, cap_name, units=None):
+        """Get Xanthos parameters from another capability.
+
+        If the no component provides the requested capability, no arguments are added.
+
+        params:
+          args: Reference to dictionary passed to Xanthos
+          arg_name: Name of argument to add
+          cap_name: Name of capability with required value
+          units: Optional string to use to assert correct units
+        """
+        if cap_name in self.cap_tbl:
+            arg_val = self.fetch(cap_name)
+            assert units is None or arg_val['units'] == units
+            args[arg_name] = self.prep_for_xanthos(arg_val)
+
+    def prep_for_xanthos(self, monthly_data):
+        """Convert a fldgen output array to Xanthos' expected input format.
+
+        Retrieve Xanthos grid cells from alternately indexed vectors.
+
+        Convert spatial data from a list of numeric vectors (each list element is one
+        month) to the input format expected by Xanthos (land cell x months).
+
+        params:
+          monthly_data: Input data for xanthos as numpy array (cells x months)
+
+        returns:
+          2d array of Xanthos cells by month
+
+        """
+        ycolnames = c('index', 'lat', 'lon')
+        ycells = pd.DataFrame(monthly_data['data'].T, columns=ycolnames)
+
+        bothcells = ycells.merge(self.cell_map, on=['lat', 'lon'])
+
+        # Order by Xanthos cell id for indexing
+        bothcells.sort_values(by='cell_id', inplace=True)
+
+        # Re-order the data to correct order by extracting with the cell index
+        cells = monthly_data[:, bothcells.index.astype(int)]
+
+        # Rows and columns need to be flipped
+        return cells.T
+
+
+class FldgenComponent(ComponentBase):
+    """Class for the precipitation and temperature grids
+
+    This component makes use of the fldgen code. That code lives in its
+    own package and must be installed independently.
+
+    params:
+       workdir  - working directory (location of frontEnd_grandExp code)
+
+    results: pr and temp grids
+    """
+
+    def __init__(self, cap_tbl):
+        super(FldgenComponent, self).__init__(cap_tbl)
+        self.addcapability("gridded_pr")
+        self.addcapability("gridded_tas")
+
+    def run_component(self):
+        """Run the fldgen and an2month R scripts."""
+        from rpy2.robjects.packages import importr
+        import rpy2.robjects as robjects
+        import numpy as np
+
+        workdir = self.params["workdir"]
+
+        an2month = os.path.join(workdir, "an2month")
+        fldgen = os.path.join(workdir, "fldgen")
+        gexp_funs = os.path.join(workdir, "frontEnd_grandExp/grand_experiment_functions.R")
+        emulator_mapping = os.path.join(workdir, "input", "emulator_mapping.csv")
+        hector_runs = os.path.join(workdir, "input", "hector_tgav-rcp45.csv")
+
+        devtools = importr("devtools")
+        devtools.load_all(an2month)
+        devtools.load_all(fldgen)
+
+        rsource = robjects.r["source"]
+        rsource(gexp_funs)
+
+        grand_experiment = robjects.r["grand_experiment"]
+        r = grand_experiment(mapping=emulator_mapping, tgavSCN=hector_runs, xanthos_dir='', N=1)
+
+        # r is a complex nested structure:
+        # Emulator1 (e.g. ipsl-cm5a-lr)
+        # -- Scenario1 (e.g. rcp45)
+        # -- -- RunNum1 (e.g. 1)
+        # -- -- -- Monthly Precipitation
+        # -- -- -- -- Precip Data (months x 67420)
+        # -- -- -- -- Precip Coordinates (3 (cell, lon, lat) x 67420)
+        # -- -- -- -- Precip Units (e.g. mm_month-1)
+        # -- -- -- Monthly Temperature
+        # -- -- -- -- Temp Data (months x 67420)
+        # -- -- -- -- Temp Coordinates (3 (cell, lon, lat) x 67420)
+        # -- -- -- -- Temp Units (e.g. C)
+        # -- -- RunNum2
+        # -- -- -- ...
+        # -- Scenario2
+        # -- -- ...
+        # Emulator2
+        # -- ...
+        # ...
+        emulator_name = r[0]
+        run_name = emulator_name[0]
+        run_N = run_name[0]
+
+        fldgen_pr = {
+            'data': np.asarray(run_N[0][0]),
+            'coords': np.asarray(run_N[0][1]),
+            'units': run_N[0][2][0]  # All R strings are in vectors; take 1st element
+        }
+
+        fldgen_tas = {
+            'data': np.asarray(run_N[1][0]),
+            'coords': np.asarray(run_N[1][1]),
+            'units': run_N[1][2][0]
+        }
+
+        self.addresults('gridded_pr', fldgen_pr)
+        self.addresults('gridded_tas', fldgen_tas)
 
         return 0
 

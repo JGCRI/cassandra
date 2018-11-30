@@ -9,6 +9,7 @@ import cassandra.components as comp
 _available_components = {
     'Global': comp.GlobalParamsComponent,
     'GcamComponent': comp.GcamComponent,
+    'FldgenComponent': comp.FldgenComponent,
     'TethysComponent': comp.TethysComponent,
     'XanthosComponent': comp.XanthosComponent,
     'DummyComponent': comp.DummyComponent,
