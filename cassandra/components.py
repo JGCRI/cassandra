@@ -708,10 +708,7 @@ class FldgenComponent(ComponentBase):
     """Class for the precipitation and temperature grids
 
     This component makes use of the fldgen code. That code lives in its
-    own repository and must be installed independently.
-
-    To start, only works with the streamlined branch modified not to
-    call Xanthos.
+    own package and must be installed independently.
 
     params:
        workdir  - working directory (location of frontEnd_grandExp code)
@@ -725,7 +722,7 @@ class FldgenComponent(ComponentBase):
         self.addcapability("gridded_tas")
 
     def run_component(self):
-        """Run the fldgen R scripts."""
+        """Run the fldgen and an2month R scripts."""
         from rpy2.robjects.packages import importr
         import rpy2.robjects as robjects
         import numpy as np
