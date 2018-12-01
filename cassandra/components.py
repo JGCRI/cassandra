@@ -25,6 +25,8 @@ TethysComponent       - Run the Tethys spatiotemporal global water use
 
 XanthosComponent      - Run the Xanthos global hydrology model.
 
+HectorStubComponent   - Serve Hector output for RCP scenarios.
+
 DummyComponent        - A simple component class for tests.
 
 """
@@ -42,6 +44,8 @@ import re
 import subprocess
 import threading
 import tempfile
+import pkg_resources
+import pandas as pd
 from sys import stdout
 from sys import stderr
 from cassandra import util
@@ -789,6 +793,82 @@ class FldgenComponent(ComponentBase):
         return 0
 
 
+class HectorStubComponent(ComponentBase):
+    """Component to serve Hector output data for RCP scenarios.
+
+    In cases where Hector output will be used only for the standard RCP
+    scenarios, it is not necessary to run the model, as the outputs never
+    change.  This module provides a way to read some of the most commonly used
+    outputs for those scenarios.
+
+    The component provides three capabilities:
+      * Tgav   : global mean temperature
+      * atm-co2: atmospheric CO2 concentration
+      * Ftot   : total radiative forcing
+
+    Each capability returns a data fram with data from all of the scenarios
+    specified in the configuration.  Spinup time steps are not included.
+
+    The parameters accepted by this component are:
+
+    scenarios : comma separated list of scenarios to include
+                e.g.: rcp26,rcp45
+                If omitted, all four rcp scenarios are included.
+
+    """
+
+    def __init__(self, cap_tbl):
+        super(HectorStubComponent, self).__init__(cap_tbl)
+        self.addcapability('Tgav')
+        self.addcapability('atm-co2')
+        self.addcapability('Ftot')
+
+
+    def run_component(self):
+        """Run the HectorStub component
+        
+        Load the requested scenarios and make each variable available to the
+        rest of the system.
+
+        """
+
+        import pandas as pd
+
+        scenarios = [x.strip() for x in self.params['scenarios'].split(',')]
+        scendata = pd.concat([self._read_scen_data(scen) for scen in scenarios])
+        scendata['scenario'] = scendata['run_name']
+
+        retcols = ['year', 'scenario', 'variable', 'value', 'units']
+        
+        self.addresults('Tgav', scendata[scendata['variable'] == 'Tgav'].loc[:, retcols])
+        self.addresults('atm-co2', scendata[scendata['variable'] == 'Ca'].loc[:, retcols])
+        self.addresults('Ftot', scendata[scendata['variable'] == 'Ftot'].loc[:, retcols])
+
+        return 0
+
+    def _read_scen_data(self, scen):
+        """Read stored scenario data.
+
+        :param scen: Scenario name to load.  One of rcp26, rcp45, rcp60, or 
+                     rcp85.
+        
+        The spinup data will be filtered from the data that is read.
+
+        """
+
+        from os.path import join
+        from pickle import load
+
+        data = pkg_resources.resource_filename('cassandra', 'data')
+        infile = open(join(data, f'hector-outputstream-{scen}.dat'),
+                      'rb')
+        df = load(infile)
+        infile.close()
+
+        return df[df['spinup'] == 0]
+
+            
+    
 class DummyComponent(ComponentBase):
     """Dummy component for tests
 
