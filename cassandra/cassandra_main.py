@@ -113,9 +113,11 @@ if __name__ == "__main__":
 
     try:
         status = main(argvals)
-    except:
+    except Exception as err:
         if argvals.mp:
             from mpi4py import MPI
+            from logging import exception
+            exception('Fatal error:  calling MPI_Abort.')
             MPI.COMM_WORLD.Abort()
         raise
 
