@@ -49,7 +49,13 @@ def bootstrap_mp(argvals):
     world = MPI.COMM_WORLD
     rank = world.Get_rank()
 
-    logging.basicConfig(filename=f'logs/cassandra-{rank}.log', level=logging.DEBUG)
+    if argvals.logdir is None:
+        logdir = 'logs'
+    else:
+        logdir = argvals.logdir
+
+    logging.basicConfig(filename=f'{logdir}/cassandra-{rank}.log', level=argvals.loglvl,
+                        filemode='w')
     
     if rank == SUPERVISOR_RANK:
         my_assignment = distribute_assignments_supervisor(argvals)

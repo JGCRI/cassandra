@@ -14,20 +14,30 @@ import sys
 import re
 import threading
 import argparse
+import logging
 
-
-def bootstrap_sp(cfgfile_name):
+def bootstrap_sp(argvals):
     """
     Bootstrap the multithreaded (single processing) version of the
     calculation.
 
-    :param cfgfile_name:  Name of the configuration file
+    :param argvals: Command line arguments parsed by argparse.
     :return: (component-list, capability-table)
     """
 
     from configobj import ConfigObj
     from cassandra.compfactory import create_component
 
+
+    # Configure logger
+    if argvals.logdir is None:
+        logging.basicConfig(stream=sys.stdout, level=argvals.loglvl)
+    else:
+        logging.basicConfig(filename=f'{argvals.logdir}/cassandra.log',
+                            level=argvals.loglvl, filemode='w') 
+    
+    cfgfile_name = argvals.ctlfile
+    
     # initialize the structures that will receive the data we are
     # parsing from the file
     capability_table = {}
@@ -53,12 +63,21 @@ def bootstrap_sp(cfgfile_name):
 
 
 def main(argvals):
+
+    # Set the appropriate logging level
+    if argvals.verbose:
+        argvals.loglvl = logging.DEBUG
+    elif argvals.quiet:
+        argvals.loglvl = logging.WARNING
+    else:
+        argvals.loglvl = logging.INFO
+        
     if argvals.mp:
         # See notes in mp.py about side effects of importing that module.
         from cassandra.mp import bootstrap_mp, finalize
         (component_list, cap_table) = bootstrap_mp(argvals)
     else:
-        (component_list, cap_table) = bootstrap_sp(argvals.ctlfile)
+        (component_list, cap_table) = bootstrap_sp(argvals)
 
     # We will look up "general" in the cap_table and process any
     # global parameters here, but in the current version we don't
@@ -109,10 +128,18 @@ def main(argvals):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--mp', action='store_true', default=False, help='Use multiprocessing.')
+    parser.add_argument('-l', dest='logdir',
+                        help='Directory for writing logfiles.  Default = stdout for SP, "logs" for MP')
+    parser.add_argument('-v', dest='verbose', action='store_true', default=False,
+                        help='Verbose mode: log output at DEBUG level (overrides -q).')
+    parser.add_argument('-q', dest='quiet', action='store_true', default=False,
+                        help='Quiet mode: log output at WARNING level (overridden by -v).')
     parser.add_argument('ctlfile', help='Name of the configuration file for the calculation.')
 
     argvals = parser.parse_args()
 
+    print(vars(argvals))
+    
     try:
         # status is the number of component failures.
         status = main(argvals)

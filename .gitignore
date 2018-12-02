@@ -65,3 +65,6 @@ Main_queries_water.xml
 build
 dist
 cassandra.egg-info
+
+# ignore log dirs
+logs/
