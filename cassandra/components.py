@@ -197,19 +197,26 @@ class ComponentBase(object):
         # eventually try to implement co-simulations.
         with self.condition:
             try:
+                import logging
+                logging.info(f'starting {self.__class__}')
                 rv = self.run_component()
                 if not rv == 0:
                     # possibly add some other error handling here.
-                    raise RuntimeError(f"{self.__class__}:  run_component returned error code {str(rv)}")
+                    msg = f"{self.__class__}:  run_component returned error code {str(rv)}"
+                    logging.error(msg)
+                    raise RuntimeError(msg)
                 else:
-                    stdout.write(f"{self.__class__}: finished successfully.\n")
+                    logging.info(f"{self.__class__}: finished successfully.\n")
 
                 self.status = 1                  # set success condition
             except:
                 self.status = 2                  # set error condition
+                logging.exception(f'Exception in component {str(self.__class__)}.')
                 raise
             finally:
                 self.condition.notify_all()      # release any waiting threads
+
+            logging.info(f'completed {self.__class__}')
         # end of with block:  lock on condition var released.
 
     def fetch(self, capability):
@@ -877,7 +884,10 @@ class DummyComponent(ComponentBase):
 
         # If configuration calls for us to fail, do so.
         if 'except' in self.params:
-            raise RuntimeError(self.params['except'])
+            from logging import critical
+            msg = self.params['except']
+            critical(msg)
+            raise RuntimeError(msg)
 
         return 0
 

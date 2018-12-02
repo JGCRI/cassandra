@@ -82,23 +82,25 @@ def main(argvals):
     for thread in component_threads:
         thread.join()
 
-    # If this is a multiprocessing calculation, then we need to
-    # perform the finalization procedure
-    if argvals.mp:
-        finalize(component_list[0], threads[0])
-
     # Check to see if any of the components failed
     fail = 0
     for component in component_list:
         if component.status != 1:
-            print(f'Component {str(component.__class__)} returned failure status\n')
+            from logging import error
+            error(f'Component {str(component.__class__)} returned failure status\n')
             fail += 1
 
     if fail == 0:
         print('\n****************All components completed successfully.')
     else:
         print(f'\n****************{fail} components failed.')
+        raise RuntimeError(f'{fail} components failed.') 
 
+    # If this is a multiprocessing calculation, then we need to
+    # perform the finalization procedure
+    if argvals.mp:
+        finalize(component_list[0], threads[0]) 
+        
     print("\nFIN.")
 
     return fail
@@ -112,6 +114,7 @@ if __name__ == "__main__":
     argvals = parser.parse_args()
 
     try:
+        # status is the number of component failures.
         status = main(argvals)
     except Exception as err:
         if argvals.mp:
@@ -120,4 +123,15 @@ if __name__ == "__main__":
             exception('Fatal error:  calling MPI_Abort.')
             MPI.COMM_WORLD.Abort()
         raise
+    finally:
+        # If the exception happened in a thread, it won't land in the
+        # exception block above.  Assume that if any components
+        # reported failure, then we need to abort the entire group.
+        if argvals.mp and status > 0:
+            from mpi4py import MPI
+            from logging import critical
+            critical(f'{status} components failed.  Calling MPI_Abort.')
+            MPI.COMM_WORLD.Abort()
+
+    # end of main block.
 
