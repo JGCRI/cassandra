@@ -52,15 +52,7 @@ def bootstrap_sp(cfgfile_name):
 # end of bootstrap_sp
 
 
-if __name__ == "__main__":
-    from cassandra.components import *
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--mp', action='store_true', default=False, help='Use multiprocessing.')
-    parser.add_argument('ctlfile', help='Name of the configuration file for the calculation.')
-
-    argvals = parser.parse_args()
-
+def main(argvals):
     if argvals.mp:
         # See notes in mp.py about side effects of importing that module.
         from cassandra.mp import bootstrap_mp, finalize
@@ -108,3 +100,22 @@ if __name__ == "__main__":
         print(f'\n****************{fail} components failed.')
 
     print("\nFIN.")
+
+    return fail
+    
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mp', action='store_true', default=False, help='Use multiprocessing.')
+    parser.add_argument('ctlfile', help='Name of the configuration file for the calculation.')
+
+    argvals = parser.parse_args()
+
+    try:
+        status = main(argvals)
+    except:
+        if argvals.mp:
+            from mpi4py import MPI
+            MPI.COMM_WORLD.Abort()
+        raise
+

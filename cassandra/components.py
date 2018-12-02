@@ -802,6 +802,9 @@ class DummyComponent(ComponentBase):
     capability_reqs - list of the capabilities this component requests
      request_delays - list of time delays (ms) before each request is made
        finish_delay - delay (ms) before the component finalizes and exports
+             except - Throw an exception with the parameter value just before
+                      the component would have exited (this is used for testing 
+                      error handling).
     """
 
     def __init__(self, cap_tbl):
@@ -871,6 +874,10 @@ class DummyComponent(ComponentBase):
         self.addresults(self.name, data)
 
         data.append((time() - st, f'Done {self.name}'))
+
+        # If configuration calls for us to fail, do so.
+        if 'except' in self.params:
+            raise RuntimeError(self.params['except'])
 
         return 0
 
