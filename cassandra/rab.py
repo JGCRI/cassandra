@@ -29,8 +29,8 @@ class RAB(object):
     def __init__(self, cap_tbl, comm=MPI.COMM_WORLD):
         self.cap_tbl = cap_tbl
         self.comm = comm
-        self.rank = comm.Get_rank()
-        self.status = 0         # status indicator follows ComponentBase convention
+        self.rank = comm.Get_rank() 
+        self.status = 1         # Always show RAB status as successful
         self.terminate = False   # sentinel indicating when it's time for the RAB to exit
         self.remote_caps = {}   # Table of remote capabilities
         self.requests_outstanding = {} # Table of requests in process 
@@ -167,8 +167,6 @@ class RAB(object):
 
                 sleep(RAB_LOOP_SLEEP)
 
-        # Record our status as successful
-        self.status = 1
         logging.debug(f'self.comm.Get_rank(): listen exiting')
         return 0
     
