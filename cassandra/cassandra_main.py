@@ -65,6 +65,8 @@ def bootstrap_sp(argvals):
 def main(argvals):
 
     # Set the appropriate logging level
+    # NB: You MUST NOT call any logging functions until either bootstrap_mp
+    #     or bootstrap_sp has been called.
     if argvals.verbose:
         argvals.loglvl = logging.DEBUG
     elif argvals.quiet:
@@ -86,7 +88,7 @@ def main(argvals):
     threads = []
 
     for component in component_list:
-        print(f"running {str(component.__class__)}")
+        logging.info(f"running {str(component.__class__)}")
         threads.append(component.run())
 
     # Wait for all component threads to complete before printing end
@@ -110,9 +112,9 @@ def main(argvals):
             fail += 1
 
     if fail == 0:
-        print('\n****************All components completed successfully.')
+        logging.info('\n****************All components completed successfully.')
     else:
-        print(f'\n****************{fail} components failed.')
+        logging.error(f'\n****************{fail} components failed.')
         raise RuntimeError(f'{fail} components failed.') 
 
     # If this is a multiprocessing calculation, then we need to
@@ -120,7 +122,7 @@ def main(argvals):
     if argvals.mp:
         finalize(component_list[0], threads[0]) 
         
-    print("\nFIN.")
+    logging.info("\nFIN.")
 
     return fail
     
@@ -138,8 +140,6 @@ if __name__ == "__main__":
 
     argvals = parser.parse_args()
 
-    print(vars(argvals))
-    
     try:
         # status is the number of component failures.
         status = main(argvals)
