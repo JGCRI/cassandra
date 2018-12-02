@@ -28,6 +28,7 @@ directory should always work.
 """
 
 from mpi4py import MPI
+from cassandra import __version__
 from cassandra.rab import RAB
 from cassandra.constants import TAG_CONFIG, SUPERVISOR_RANK
 from cassandra.compfactory import create_component
@@ -56,6 +57,9 @@ def bootstrap_mp(argvals):
 
     logging.basicConfig(filename=f'{logdir}/cassandra-{rank}.log', level=argvals.loglvl,
                         filemode='w')
+    # print the location of the logs so that it will appear in the
+    # output file of batch jobs.
+    print(f'\nThis is Cassandra version {__version__}.  Log output will be written to {logdir}.')
     
     if rank == SUPERVISOR_RANK:
         my_assignment = distribute_assignments_supervisor(argvals)

@@ -15,7 +15,7 @@ def get_requirements():
 
 setup(
     name='cassandra',
-    version='0.4.0',
+    version='0.5.0',
     description='A GCAM automation system',
     url='https://github.com/jgcri/cassandra',
     author='Robert Link; Caleb Braun',

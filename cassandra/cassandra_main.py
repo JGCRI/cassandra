@@ -26,15 +26,19 @@ def bootstrap_sp(argvals):
     """
 
     from configobj import ConfigObj
+    from cassandra import __version__
     from cassandra.compfactory import create_component
 
 
     # Configure logger
     if argvals.logdir is None:
         logging.basicConfig(stream=sys.stdout, level=argvals.loglvl)
+        logging.info(f'This is Cassandra version {__version__}.')
     else:
         logging.basicConfig(filename=f'{argvals.logdir}/cassandra.log',
-                            level=argvals.loglvl, filemode='w') 
+                            level=argvals.loglvl, filemode='w')
+        # Write to screen the location of the logging output
+        print(f'This is Cassandra version {__version__}.  Output will be logged to {argvals.logdir}/cassandra.log')
     
     cfgfile_name = argvals.ctlfile
     
