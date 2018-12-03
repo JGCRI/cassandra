@@ -41,7 +41,7 @@ class RAB(object):
         
     def run(self):
         """Execute the RAB's listen() method in a separate thread."""
-        thread = threading.Thread(target=lambda: self.listen())
+        thread = threading.Thread(target=lambda: self.listen_wrap())
         thread.start()
         # returns immediately
         return thread
@@ -123,7 +123,23 @@ class RAB(object):
         logging.debug(f'got {reqtag} from {provider_rank}')
         return rslt
 
-    
+    def listen_wrap(self):
+        """Thread wrapper for the listen() method.
+
+        The purpose of this wrapper is to run listen() and ensure that in the
+        event of a failure MPI_Abort gets called, so as not to hang the system.
+
+        """
+
+        try:
+            return self.listen()
+        except:
+            self.status = 2
+            logging.exception('Exception in RAB.listen().  Calling MPI_Abort.')
+            MPI.COMM_World.Abort()
+            raise
+
+        
     def listen(self):
         """Main control loop for RAB listener.
 
@@ -167,7 +183,7 @@ class RAB(object):
 
                 sleep(RAB_LOOP_SLEEP)
 
-        logging.debug(f'self.comm.Get_rank(): listen exiting')
+        logging.debug(f'{self.comm.Get_rank()}: listen exiting')
         return 0
     
     def process_incoming(self):
