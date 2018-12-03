@@ -806,7 +806,7 @@ class HectorStubComponent(ComponentBase):
       * atm-co2: atmospheric CO2 concentration
       * Ftot   : total radiative forcing
 
-    Each capability returns a data fram with data from all of the scenarios
+    Each capability returns a data frame with data from all of the scenarios
     specified in the configuration.  Spinup time steps are not included.
 
     The parameters accepted by this component are:
@@ -823,10 +823,9 @@ class HectorStubComponent(ComponentBase):
         self.addcapability('atm-co2')
         self.addcapability('Ftot')
 
-
     def run_component(self):
         """Run the HectorStub component
-        
+
         Load the requested scenarios and make each variable available to the
         rest of the system.
 
@@ -839,7 +838,7 @@ class HectorStubComponent(ComponentBase):
         scendata['scenario'] = scendata['run_name']
 
         retcols = ['year', 'scenario', 'variable', 'value', 'units']
-        
+
         self.addresults('Tgav', scendata[scendata['variable'] == 'Tgav'].loc[:, retcols])
         self.addresults('atm-co2', scendata[scendata['variable'] == 'Ca'].loc[:, retcols])
         self.addresults('Ftot', scendata[scendata['variable'] == 'Ftot'].loc[:, retcols])
@@ -849,9 +848,9 @@ class HectorStubComponent(ComponentBase):
     def _read_scen_data(self, scen):
         """Read stored scenario data.
 
-        :param scen: Scenario name to load.  One of rcp26, rcp45, rcp60, or 
+        :param scen: Scenario name to load.  One of rcp26, rcp45, rcp60, or
                      rcp85.
-        
+
         The spinup data will be filtered from the data that is read.
 
         """
@@ -867,8 +866,7 @@ class HectorStubComponent(ComponentBase):
 
         return df[df['spinup'] == 0]
 
-            
-    
+
 class DummyComponent(ComponentBase):
     """Dummy component for tests
 
