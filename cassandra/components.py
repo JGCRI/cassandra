@@ -833,6 +833,12 @@ class HectorStubComponent(ComponentBase):
 
         import pandas as pd
 
+        # scenarios is either parsed as a list or a string, depending on if
+        # multiple scenarios were specified
+        scenarios = self.params['scenarios']
+        if not isinstance(scenarios, list):
+            scenarios = [scenarios]
+
         scendata = pd.concat([self._read_scen_data(scen) for scen in scenarios])
         scendata['scenario'] = scendata['run_name']
 
