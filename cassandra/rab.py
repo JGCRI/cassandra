@@ -10,7 +10,7 @@ it's just a name.  Also, "RAB" are my mom's initials.  Hi, Mom!
 
 This module should _only_ be imported by the my.py module.  It imports mpi4py,
 which will have the side effect of trying to initialize MPI if mp.py hasn't
-already done it.  
+already done it.
 """
 
 from cassandra.constants import TAG_REQ, TAG_REQID_BASE
@@ -22,23 +22,24 @@ import logging
 # The choice of the sleep length in RAB listener loop is a tradeoff.  Making it
 # shorter improves responsiveness, but creates more waiting in the GIL,
 # potentially slowing down threads that are actually running models (especially
-# if those models are implemented in python and running in the same process).  
+# if those models are implemented in python and running in the same process).
 RAB_LOOP_SLEEP = 0.05          # 50 ms
+
 
 class RAB(object):
     def __init__(self, cap_tbl, comm=MPI.COMM_WORLD):
         self.cap_tbl = cap_tbl
         self.comm = comm
-        self.rank = comm.Get_rank() 
-        self.status = 1         # Always show RAB status as successful
-        self.terminate = False   # sentinel indicating when it's time for the RAB to exit
+        self.rank = comm.Get_rank()
+        self.status = 0         # status indicator follows ComponentBase convention
+        self.terminate = False  # sentinel indicating when it's time for the RAB to exit
         self.remote_caps = {}   # Table of remote capabilities
-        self.requests_outstanding = {} # Table of requests in process 
+        self.requests_outstanding = {}  # Table of requests in process
 
         # members for managing message tags
-        self.taglock = threading.Condition() # Lock for working with the list of tags
-        self.tags = set()                    # MPI message tags in use 
-        
+        self.taglock = threading.Condition()  # Lock for working with the list of tags
+        self.tags = set()                    # MPI message tags in use
+
     def run(self):
         """Execute the RAB's listen() method in a separate thread."""
         thread = threading.Thread(target=lambda: self.listen_wrap())
@@ -65,7 +66,6 @@ class RAB(object):
             self.cap_tbl[cap] = self
             self.remote_caps[cap] = remote_rank
 
-            
     def unique_tag(self):
         """Get a message tag not already in use by another thread.
         """
@@ -78,9 +78,8 @@ class RAB(object):
             while tag in self.tags:
                 tag += 1
             self.tags.add(tag)
-            return tag 
+            return tag
 
-        
     def fetch(self, capability):
         """Fetch a capability from a remote process.
 
@@ -108,9 +107,9 @@ class RAB(object):
         provider = self.cap_tbl[capability]
         if self is not provider:
             return provider.fetch(capability)
-            
-        provider_rank = self.remote_caps[capability] 
-        reqtag = self.unique_tag() # get a unique tag for the response
+
+        provider_rank = self.remote_caps[capability]
+        reqtag = self.unique_tag()  # get a unique tag for the response
 
         # send both the capability and the tag we will be expecting for the
         # response to the remote RAB
@@ -139,7 +138,6 @@ class RAB(object):
             MPI.COMM_World.Abort()
             raise
 
-        
     def listen(self):
         """Main control loop for RAB listener.
 
@@ -185,7 +183,7 @@ class RAB(object):
 
         logging.debug(f'{self.comm.Get_rank()}: listen exiting')
         return 0
-    
+
     def process_incoming(self):
         """Dispatch incoming requests from other nodes, if any.
         """
@@ -198,7 +196,7 @@ class RAB(object):
 
             # Create a thread to fetch the capability.  This thread might block.
             future = self.executor.submit(self.fetch, capability)
-            
+
             # Add the source and the remote tag to the table, indexed by thread.
             # We don't need the capability anymore, so we don't store it.
             self.requests_outstanding[future] = (source, rtag)
@@ -230,5 +228,3 @@ class RAB(object):
             logging.debug(f'sent {rtag} to {source}')
 
     # End of process_outstanding
-
-    

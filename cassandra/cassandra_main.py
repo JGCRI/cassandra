@@ -82,29 +82,30 @@ def main(argvals):
     for thread in component_threads:
         thread.join()
 
-    # Check to see if any of the components failed
-    fail = 0
+    # Check to see if any of the components failed, and that the RAB
+    # is still running
+    nfail = 0
     for component in component_list:
-        if component.status != 1:
+        if component.status != 1 or (type(component).__name__ == 'RAB' and component.status != 0):
             from logging import error
             error(f'Component {str(component.__class__)} returned failure status\n')
-            fail += 1
+            nfail += 1
 
-    if fail == 0:
+    if nfail == 0:
         print('\n****************All components completed successfully.')
     else:
-        print(f'\n****************{fail} components failed.')
-        raise RuntimeError(f'{fail} components failed.') 
+        print(f'\n****************{nfail} components failed.')
+        raise RuntimeError(f'{nfail} components failed.')
 
     # If this is a multiprocessing calculation, then we need to
     # perform the finalization procedure
     if argvals.mp:
-        finalize(component_list[0], threads[0]) 
-        
+        finalize(component_list[0], threads[0])
+
     print("\nFIN.")
 
-    return fail
-    
+    return nfail
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -134,4 +135,3 @@ if __name__ == "__main__":
             MPI.COMM_WORLD.Abort()
 
     # end of main block.
-
