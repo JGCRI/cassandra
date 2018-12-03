@@ -833,7 +833,6 @@ class HectorStubComponent(ComponentBase):
 
         import pandas as pd
 
-        scenarios = [x.strip() for x in self.params['scenarios'].split(',')]
         scendata = pd.concat([self._read_scen_data(scen) for scen in scenarios])
         scendata['scenario'] = scendata['run_name']
 
