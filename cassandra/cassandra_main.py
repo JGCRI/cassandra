@@ -83,13 +83,28 @@ def main(argvals):
         thread.join()
 
     # Check to see if any of the components failed, and that the RAB
-    # is still running
+    # is still running.  Once again take advantage of the fact that
+    # if the RAB is present, it is always the first in the list.
     nfail = 0
-    for component in component_list:
-        if component.status != 1 or (type(component).__name__ == 'RAB' and component.status != 0):
+    
+    if argvals.mp:
+        reg_comps = component_list[1:]
+        rab_comp = component_list[0]
+    else:
+        reg_comps = component_list
+        rab_comp = None
+        
+    for component in reg_comps:
+        if component.status != 1:
             from logging import error
             error(f'Component {str(component.__class__)} returned failure status\n')
             nfail += 1
+            
+    if rab_comp is not None and rab_comp.status != 0:
+        from logging import error
+        error('RAB has crashed or is otherwise not running.')
+        nfail += 1
+        
 
     if nfail == 0:
         print('\n****************All components completed successfully.')
