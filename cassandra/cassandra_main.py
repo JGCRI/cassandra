@@ -139,14 +139,5 @@ if __name__ == "__main__":
             exception('Fatal error:  calling MPI_Abort.')
             MPI.COMM_WORLD.Abort()
         raise
-    finally:
-        # If the exception happened in a thread, it won't land in the
-        # exception block above.  Assume that if any components
-        # reported failure, then we need to abort the entire group.
-        if argvals.mp and status > 0:
-            from mpi4py import MPI
-            from logging import critical
-            critical(f'{status} components failed.  Calling MPI_Abort.')
-            MPI.COMM_WORLD.Abort()
 
     # end of main block.
