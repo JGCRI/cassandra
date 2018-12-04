@@ -53,9 +53,10 @@ def bootstrap_mp(argvals):
 
     if argvals.logdir is None:
         logdir = 'logs'
-        os.makedirs(logdir, exist_ok=True)
     else:
         logdir = argvals.logdir
+
+    os.makedirs(logdir, exist_ok=True)
 
     logging.basicConfig(filename=f'{logdir}/cassandra-{rank}.log', level=argvals.loglvl,
                         filemode='w')
