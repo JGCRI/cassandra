@@ -46,7 +46,7 @@ doc/*.gz
 # PyCharm files
 .idea/
 
-# Output 
+# Output
 *.nc
 output/
 batch-out/
@@ -68,3 +68,6 @@ cassandra.egg-info
 
 # ignore log dirs
 logs/
+
+# raw hector data not committed with this package
+hector-outputstream*.csv

@@ -22,6 +22,8 @@ setup(
     author_email='robert.link@pnnl.gov',
     license='BSD 2-Clause',
     packages=find_packages(),
+    package_data={'cassandra':['data/*.dat']},
+    include_package_data=True,
     python_requires='>=3.6',
     long_description=readme(),
     install_requires=get_requirements(),

@@ -16,6 +16,7 @@ import threading
 import argparse
 import logging
 
+
 def bootstrap_sp(argvals):
     """
     Bootstrap the multithreaded (single processing) version of the
@@ -29,7 +30,6 @@ def bootstrap_sp(argvals):
     from cassandra import __version__
     from cassandra.compfactory import create_component
 
-
     # Configure logger
     if argvals.logdir is None:
         logging.basicConfig(stream=sys.stdout, level=argvals.loglvl)
@@ -39,9 +39,9 @@ def bootstrap_sp(argvals):
                             level=argvals.loglvl, filemode='w')
         # Write to screen the location of the logging output
         print(f'This is Cassandra version {__version__}.  Output will be logged to {argvals.logdir}/cassandra.log')
-    
+
     cfgfile_name = argvals.ctlfile
-    
+
     # initialize the structures that will receive the data we are
     # parsing from the file
     capability_table = {}
@@ -77,7 +77,7 @@ def main(argvals):
         argvals.loglvl = logging.WARNING
     else:
         argvals.loglvl = logging.INFO
-        
+
     if argvals.mp:
         # See notes in mp.py about side effects of importing that module.
         from cassandra.mp import bootstrap_mp, finalize
@@ -107,29 +107,44 @@ def main(argvals):
     for thread in component_threads:
         thread.join()
 
-    # Check to see if any of the components failed
-    fail = 0
-    for component in component_list:
+    # Check to see if any of the components failed, and that the RAB
+    # is still running.  Once again take advantage of the fact that
+    # if the RAB is present, it is always the first in the list.
+    nfail = 0
+
+    if argvals.mp:
+        reg_comps = component_list[1:]
+        rab_comp = component_list[0]
+    else:
+        reg_comps = component_list
+        rab_comp = None
+
+    for component in reg_comps:
         if component.status != 1:
             from logging import error
             error(f'Component {str(component.__class__)} returned failure status\n')
-            fail += 1
+            nfail += 1
 
-    if fail == 0:
+    if rab_comp is not None and rab_comp.status != 0:
+        from logging import error
+        error('RAB has crashed or is otherwise not running.')
+        nfail += 1
+
+    if nfail == 0:
         logging.info('\n****************All components completed successfully.')
     else:
-        logging.error(f'\n****************{fail} components failed.')
-        raise RuntimeError(f'{fail} components failed.') 
+        logging.error(f'\n****************{nfail} components failed.')
+        raise RuntimeError(f'{nfail} components failed.')
 
     # If this is a multiprocessing calculation, then we need to
     # perform the finalization procedure
     if argvals.mp:
-        finalize(component_list[0], threads[0]) 
-        
+        finalize(component_list[0], threads[0])
+
     logging.info("\nFIN.")
 
-    return fail
-    
+    return nfail
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -154,15 +169,5 @@ if __name__ == "__main__":
             exception('Fatal error:  calling MPI_Abort.')
             MPI.COMM_WORLD.Abort()
         raise
-    finally:
-        # If the exception happened in a thread, it won't land in the
-        # exception block above.  Assume that if any components
-        # reported failure, then we need to abort the entire group.
-        if argvals.mp and status > 0:
-            from mpi4py import MPI
-            from logging import critical
-            critical(f'{status} components failed.  Calling MPI_Abort.')
-            MPI.COMM_WORLD.Abort()
 
     # end of main block.
-
