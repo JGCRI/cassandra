@@ -39,16 +39,12 @@ DummyComponent        - A simple component class for tests.
 # relevant python component.
 
 import os
-import os.path
 import re
 import subprocess
 import threading
-import tempfile
 import logging
 import pkg_resources
 import pandas as pd
-from sys import stdout
-from sys import stderr
 from cassandra import util
 
 # This class is here to make it easy for a class to ignore failures to
