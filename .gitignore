@@ -65,3 +65,6 @@ Main_queries_water.xml
 build
 dist
 cassandra.egg-info
+
+# raw hector data not committed with this package
+hector-outputstream*.csv
