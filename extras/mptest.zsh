@@ -11,10 +11,9 @@
 ## python.  Cassandra has been tested with OpenMPI 3.1.0 and
 ## python/anaconda 3.6.4
 
-## This batch script should be submitted from the top level of the
-## cassandra repository (one level up from the directory that the
-## script lives in).
+## This batch script should be submitted from the extras subdir of the
+## cassandra repository.
 
 echo "nodes: $SLURM_JOB_NODELIST"
 
-mpirun -np 4 ./cassandra/cassandra_main.py --mp ./extras/example.cfg
+mpirun -np 4  ../cassandra/cassandra_main.py --mp ./example.cfg

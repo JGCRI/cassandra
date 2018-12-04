@@ -52,15 +52,7 @@ def bootstrap_sp(cfgfile_name):
 # end of bootstrap_sp
 
 
-if __name__ == "__main__":
-    from cassandra.components import *
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--mp', action='store_true', default=False, help='Use multiprocessing.')
-    parser.add_argument('ctlfile', help='Name of the configuration file for the calculation.')
-
-    argvals = parser.parse_args()
-
+def main(argvals):
     if argvals.mp:
         # See notes in mp.py about side effects of importing that module.
         from cassandra.mp import bootstrap_mp, finalize
@@ -90,21 +82,62 @@ if __name__ == "__main__":
     for thread in component_threads:
         thread.join()
 
+    # Check to see if any of the components failed, and that the RAB
+    # is still running.  Once again take advantage of the fact that
+    # if the RAB is present, it is always the first in the list.
+    nfail = 0
+    
+    if argvals.mp:
+        reg_comps = component_list[1:]
+        rab_comp = component_list[0]
+    else:
+        reg_comps = component_list
+        rab_comp = None
+        
+    for component in reg_comps:
+        if component.status != 1:
+            from logging import error
+            error(f'Component {str(component.__class__)} returned failure status\n')
+            nfail += 1
+            
+    if rab_comp is not None and rab_comp.status != 0:
+        from logging import error
+        error('RAB has crashed or is otherwise not running.')
+        nfail += 1
+        
+
+    if nfail == 0:
+        print('\n****************All components completed successfully.')
+    else:
+        print(f'\n****************{nfail} components failed.')
+        raise RuntimeError(f'{nfail} components failed.')
+
     # If this is a multiprocessing calculation, then we need to
     # perform the finalization procedure
     if argvals.mp:
         finalize(component_list[0], threads[0])
 
-    # Check to see if any of the components failed
-    fail = 0
-    for component in component_list:
-        if component.status != 1:
-            print(f'Component {str(component.__class__)} returned failure status\n')
-            fail += 1
-
-    if fail == 0:
-        print('\n****************All components completed successfully.')
-    else:
-        print(f'\n****************{fail} components failed.')
-
     print("\nFIN.")
+
+    return nfail
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mp', action='store_true', default=False, help='Use multiprocessing.')
+    parser.add_argument('ctlfile', help='Name of the configuration file for the calculation.')
+
+    argvals = parser.parse_args()
+
+    try:
+        # status is the number of component failures.
+        status = main(argvals)
+    except Exception as err:
+        if argvals.mp:
+            from mpi4py import MPI
+            from logging import exception
+            exception('Fatal error:  calling MPI_Abort.')
+            MPI.COMM_WORLD.Abort()
+        raise
+
+    # end of main block.

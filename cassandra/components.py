@@ -201,19 +201,26 @@ class ComponentBase(object):
         # eventually try to implement co-simulations.
         with self.condition:
             try:
+                import logging
+                logging.info(f'starting {self.__class__}')
                 rv = self.run_component()
                 if not rv == 0:
                     # possibly add some other error handling here.
-                    raise RuntimeError(f"{self.__class__}:  run_component returned error code {str(rv)}")
+                    msg = f"{self.__class__}:  run_component returned error code {str(rv)}"
+                    logging.error(msg)
+                    raise RuntimeError(msg)
                 else:
-                    stdout.write(f"{self.__class__}: finished successfully.\n")
+                    logging.info(f"{self.__class__}: finished successfully.\n")
 
                 self.status = 1                  # set success condition
             except:
                 self.status = 2                  # set error condition
+                logging.exception(f'Exception in component {str(self.__class__)}.')
                 raise
             finally:
                 self.condition.notify_all()      # release any waiting threads
+
+            logging.info(f'completed {self.__class__}')
         # end of with block:  lock on condition var released.
 
     def fetch(self, capability):
@@ -885,6 +892,9 @@ class DummyComponent(ComponentBase):
     capability_reqs - list of the capabilities this component requests
      request_delays - list of time delays (ms) before each request is made
        finish_delay - delay (ms) before the component finalizes and exports
+             except - Throw an exception with the parameter value just before
+                      the component would have exited (this is used for testing 
+                      error handling).
     """
 
     def __init__(self, cap_tbl):
@@ -954,6 +964,13 @@ class DummyComponent(ComponentBase):
         self.addresults(self.name, data)
 
         data.append((time() - st, f'Done {self.name}'))
+
+        # If configuration calls for us to fail, do so.
+        if 'except' in self.params:
+            from logging import critical
+            msg = self.params['except']
+            critical(msg)
+            raise RuntimeError(msg)
 
         return 0
 
