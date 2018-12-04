@@ -1,14 +1,14 @@
 #!/bin/env python
-"""GCAM automation system package.
+"""Cassandra model coupling framework
 
-This package contains the components that implement the GCAM automation system,
-along with utility functions that are common to all GCAM functional areas.
-Several GCAM functional areas also have subpackages that implement calculations
-specific to those areas; for example, gcam.water for water downscaling or
-gcam.land for land use downscaling.  The package also contains gcam_driver, a
-stand-alone program for running the automation system.
+This package contains the components that implement the Cassandra model 
+coupling framework.  The package also contains cassandra_main.py, a
+stand-alone program for running the framework.
 
 """
 
+import pkg_resources
 
-__all__ = ['util', 'water', 'components']
+__version__ = pkg_resources.get_distribution('cassandra').version
+
+__all__ = ['util', 'components']

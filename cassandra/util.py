@@ -7,6 +7,7 @@ import string
 import subprocess
 import tempfile
 import random
+import logging
 
 # utility functions used in other gcam python code
 
@@ -159,7 +160,7 @@ def gcam_query(batchqfiles, dbxmlfiles, inputdir, outfiles):
     # Display numbers up to 1024 seem to be safe.
     random.jumpahead(os.getpid())  # make sure that different instances have different rng states.
     disp = random.randint(1, 1024)
-    print('X display is: %d' % disp)
+    logging.info('X display is: %d' % disp)
     xvfb = subprocess.Popen(['Xvfb', ':%d' % disp, '-pn', '-audit', '4', '-screen', '0', '800x600x16'])
     try:
         ldlibpath = os.getenv('LD_LIBRARY_PATH')
@@ -169,7 +170,7 @@ def gcam_query(batchqfiles, dbxmlfiles, inputdir, outfiles):
             ldlibpath = "LD_LIBRARY_PATH=%s:%s" % (ldlibpath, DBXMLlib)
 
         for (query, dbxml, output) in zip(qlist, dbxmllist, outlist):
-            print(query, output)
+            logging.info(query, output)
             # make a temporary file
             tempquery = None
             try:
@@ -299,7 +300,7 @@ def abspath(filename, defaultpath=None, tag=None):
 
     """
 
-    print('[%s]: default path= %s  filename= %s' % (str(tag), str(defaultpath), str(filename)))
+    logging.info('[%s]: default path= %s  filename= %s' % (str(tag), str(defaultpath), str(filename)))
 
     if filename[0] == '/':
         return filename

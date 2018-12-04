@@ -39,15 +39,12 @@ DummyComponent        - A simple component class for tests.
 # relevant python component.
 
 import os
-import os.path
 import re
 import subprocess
 import threading
-import tempfile
+import logging
 import pkg_resources
 import pandas as pd
-from sys import stdout
-from sys import stderr
 from cassandra import util
 
 # This class is here to make it easy for a class to ignore failures to
@@ -201,8 +198,7 @@ class ComponentBase(object):
         # eventually try to implement co-simulations.
         with self.condition:
             try:
-                import logging
-                logging.info(f'starting {self.__class__}')
+                logging.debug(f'starting {self.__class__}')
                 rv = self.run_component()
                 if not rv == 0:
                     # possibly add some other error handling here.
@@ -210,7 +206,7 @@ class ComponentBase(object):
                     logging.error(msg)
                     raise RuntimeError(msg)
                 else:
-                    logging.info(f"{self.__class__}: finished successfully.\n")
+                    logging.debug(f"{self.__class__}: finished successfully.\n")
 
                 self.status = 1                  # set success condition
             except:
@@ -220,7 +216,7 @@ class ComponentBase(object):
             finally:
                 self.condition.notify_all()      # release any waiting threads
 
-            logging.info(f'completed {self.__class__}')
+            logging.debug(f'completed {self.__class__}')
         # end of with block:  lock on condition var released.
 
     def fetch(self, capability):
@@ -273,7 +269,7 @@ class ComponentBase(object):
         # statement tries to obtain the lock.
         with self.condition:
             if self.status == 0:                  # component hasn't run yet.  Wait on it
-                print(f"\twaiting on {self.__class__}\n")
+                logging.debug(f"\twaiting on {self.__class__}\n")
                 self.condition.wait()
         # end of with block:  lock is released
 
@@ -388,8 +384,8 @@ class GlobalParamsComponent(ComponentBase):
         # this is a reference copy, so any entries added to params will also appear in results.
         self.addresults('general', self.params)
 
-        print('General parameters as input:')
-        print(self.results['general'])
+        logging.debug('General parameters as input:')
+        logging.debug(self.results['general'])
 
         # We need to allow gcamutil access to these parameters, since it doesn't otherwise know how to find the
         # global params component.  <- gross.  we need a better way to do this.
@@ -410,7 +406,7 @@ class GlobalParamsComponent(ComponentBase):
         if 'rgnconfig' in genrslt:
             rgnconfig = genrslt['rgnconfig']
         else:
-            stdout.write('[GlobalParamsComponent]: Using default region mapping (14 region)')
+            logging.warning('[GlobalParamsComponent]: Using default region mapping (14 region)')
             rgnconfig = 'rgn14'
         genrslt['rgnconfig'] = util.abspath(rgnconfig, genrslt['inputdir'])
 
@@ -501,7 +497,7 @@ class GcamComponent(ComponentBase):
                     dbxmlfile = match.group(1)
                     break
 
-            print(f"{self.__class__}:  dbxmlfile = {dbxmlfile}")
+            logging.info(f"{self.__class__}:  dbxmlfile = {dbxmlfile}")
             # The file spec is a relative path, starting from the
             # directory that contains the config file.
             dbxmlfile = os.path.join(self.workdir, dbxmlfile)
@@ -510,7 +506,7 @@ class GcamComponent(ComponentBase):
                 if not self.clobber:
                     # This is not an error; it just means we can leave
                     # the existing output in place and return it.
-                    print("GcamComponent:  results exist and no clobber.  Skipping.")
+                    logging.info("GcamComponent:  results exist and no clobber.  Skipping.")
                     gcamrslt["changed"] = 0  # mark the cached results as clean
                     return 0
                 else:
@@ -531,7 +527,7 @@ class GcamComponent(ComponentBase):
         self.addresults('gcam-core', gcamrslt)
 
         # now we're ready to actually do the run.  We don't check the return code; we let the run() method do that.
-        print(f"Running:  {exe} -C{cfg} -L{logcfg}")
+        logging.info(f"Running:  {exe} -C{cfg} -L{logcfg}")
 
         if logfile is None:
             return subprocess.call([exe, '-C'+cfg, '-L'+logcfg], cwd=self.workdir)
@@ -893,7 +889,7 @@ class DummyComponent(ComponentBase):
      request_delays - list of time delays (ms) before each request is made
        finish_delay - delay (ms) before the component finalizes and exports
              except - Throw an exception with the parameter value just before
-                      the component would have exited (this is used for testing 
+                      the component would have exited (this is used for testing
                       error handling).
     """
 
