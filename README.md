@@ -52,6 +52,8 @@ to add the `--user` flag.
 
 ## Running
 
+### Standalone runs
+
 To run your models under Cassandra you will first need to prepare a
 configuration file.  Configuration files are written in the INI
 format.  In this format, the file is divided into sections, the names
@@ -78,3 +80,38 @@ Depending on how your cluster is set up, you might have to include
 additional flags for `mpirun`, such as a hostfile giving the names of
 the hosts you will be running on.  An example job script for systems
 using the Slurm resource manager is included in `extras/mptest.zsh`.
+
+### Running from another python program
+
+It isn't strictly necessary to run `cassandra_main.py` as a standalone
+script.  You could instead run from another python program, or from a
+Jupyter notebook.  Besides giving access to the interactive features
+of notebooks, running this way could allow you to import components
+(see "Adding New Models" below) that are stored in modules outside the
+Cassandra package.  To do this, you will need to import
+`cassandra_main` as a module.  If you want to add a new component, you
+will also need the `add_new_component` function from
+`cassandra.compfactory`.
+
+Once you've imported the necessary modules, continue by adding your
+custom components, if any.  Then, you will need to create the
+structure used as the argument to the `main()` function.  In the
+standalone version, this structure is created by the `argparse` module
+from the command line arguments.  
+
+```python
+from cassandra.cassandra_main import main
+## If including a component from an external module, add these lines
+## too.  (Make sure mycomp.py is in your python path!)
+from cassandra.compfactory import add_new_component
+import mycomp.py
+
+```
+
+
+
+## Adding New Models
+
+Cassandra's interface to models is provided by objects called
+_components_.  To add a model to the system, you have to create a
+component to run the model.  Components 

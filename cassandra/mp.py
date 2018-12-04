@@ -36,38 +36,41 @@ import logging
 import os
 
 
-def bootstrap_mp(argvals):
+def bootstrap_mp(args):
     """Bootstrap the multiprocessing system.
+
+    :param args: Dictionary of arguments parsed from the command line.
 
     1. Parse configuration files
     2. Distribute configuration information to peers
     3. Create RABs
     4. Create components
     5. Add remote capabilities to capability table
-    6. Return component list (including RAB).  The main loop will be able to
-    start these components in the usual way.
+    6. Return component list (including the RAB first in the list).  The main loop 
+       will be able to start these components in the usual way.
+
     """
 
     world = MPI.COMM_WORLD
     rank = world.Get_rank()
 
-    if argvals.logdir is None:
+    if args['logdir'] is None:
         logdir = 'logs'
     else:
-        logdir = argvals.logdir
+        logdir = args['logdir']
 
     os.makedirs(logdir, exist_ok=True)
 
-    logging.basicConfig(filename=f'{logdir}/cassandra-{rank}.log', level=argvals.loglvl,
+    logging.basicConfig(filename=f'{logdir}/cassandra-{rank}.log', level=args['loglvl'],
                         filemode='w')
 
     if rank == SUPERVISOR_RANK:
         # Print the location of the logs so that it will appear in the
         # output file of batch jobs.
         print(f'\nThis is Cassandra version {__version__}.  Log output will be written to {logdir}.')
-        my_assignment = distribute_assignments_supervisor(argvals)
+        my_assignment = distribute_assignments_supervisor(args)
     else:
-        my_assignment = distribute_assignments_worker(argvals)
+        my_assignment = distribute_assignments_worker(args)
 
     # my_assignment will be a dictionary of configuration sections assigned to
     # this process.  We need to create and initialize the components assigned to
@@ -104,10 +107,10 @@ def bootstrap_mp(argvals):
     return (comps, cap_tbl)
 
 
-def distribute_assignments_worker(argvals):
+def distribute_assignments_worker(args):
     """Prepare to receive component assignments
 
-    :param argvals: Arguments structure parsed by argparse.  Not currently used,
+    :param args: Dictionary of arguments parsed by argparse.  Not currently used,
                     but included in case we eventually want to have command line
                     arguments that affect the way assignments are handled.
     :return: Dictionary of component definitions for components assigned to this
@@ -125,10 +128,10 @@ def distribute_assignments_worker(argvals):
     return assignments
 
 
-def distribute_assignments_supervisor(argvals):
+def distribute_assignments_supervisor(args):
     """Parse config file and distribute component assignments
 
-    :param argvals: Arguments structure parsed by argparse.
+    :param args: Dictionary of arguments parsed by argparse.
     :return: Dictionary of component definitions for components assigned to this
                     process (i.e., the supervisor).
 
@@ -150,7 +153,7 @@ def distribute_assignments_supervisor(argvals):
 
     from configobj import ConfigObj
 
-    config = ConfigObj(argvals.ctlfile)
+    config = ConfigObj(args['ctlfile'])
 
     # Get list of section names
     section_names = list(config.keys())

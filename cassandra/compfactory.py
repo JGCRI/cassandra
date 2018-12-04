@@ -36,3 +36,24 @@ def create_component(compname, cap_tbl):
         raise RuntimeError(f'Unknown component type {compname}')
 
     return _available_components[compname](cap_tbl)
+
+def add_new_component(compname, classobj):
+    """Add a new type of component to the list of available components.
+
+    :param compname: Name by which the new component will be known in 
+                     configuration files.
+    :param classobj: The class object for the class implementing the 
+                     component.  The class MUST be a subclass of ComponentBase.
+
+    Calling this function will add the requested component to the available
+    components table, allowing it to be parsed from config files and instantiated
+    by the system.  The class passed in as class object must be a subclass of 
+    ComponentBase.  The class inheritance isn't checked, so passing some random class
+    might appear to work, or it might work in actuality, but nothing is guaranteed.
+
+    """
+
+    global _available_components
+    
+    _available_components[compname] = classobj
+    
