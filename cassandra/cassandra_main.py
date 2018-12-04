@@ -15,6 +15,7 @@ import re
 import threading
 import argparse
 import logging
+import os
 
 
 def bootstrap_sp(argvals):
@@ -35,6 +36,7 @@ def bootstrap_sp(argvals):
         logging.basicConfig(stream=sys.stdout, level=argvals.loglvl)
         logging.info(f'This is Cassandra version {__version__}.')
     else:
+        os.makedirs(argvals.logdir, exist_ok=True)
         logging.basicConfig(filename=f'{argvals.logdir}/cassandra.log',
                             level=argvals.loglvl, filemode='w')
         # Write to screen the location of the logging output
