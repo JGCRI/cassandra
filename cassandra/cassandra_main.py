@@ -18,12 +18,11 @@ import logging
 import os
 
 
-def bootstrap_sp(argvals):
+def bootstrap_sp(args):
     """
-    Bootstrap the multithreaded (single processing) version of the
-    calculation.
+    Bootstrap the multithreaded (single processing) version of the calculation.
 
-    :param argvals: Command line arguments parsed by argparse.
+    :param args: Dictionary of command line arguments parsed by argparse.
     :return: (component-list, capability-table)
     """
 
@@ -32,17 +31,17 @@ def bootstrap_sp(argvals):
     from cassandra.compfactory import create_component
 
     # Configure logger
-    if argvals.logdir is None:
-        logging.basicConfig(stream=sys.stdout, level=argvals.loglvl)
+    if args['logdir'] is None:
+        logging.basicConfig(stream=sys.stdout, level=args['loglvl'])
         logging.info(f'This is Cassandra version {__version__}.')
     else:
-        os.makedirs(argvals.logdir, exist_ok=True)
-        logging.basicConfig(filename=f'{argvals.logdir}/cassandra.log',
-                            level=argvals.loglvl, filemode='w')
+        os.makedirs(args['logdir'], exist_ok=True)
+        logging.basicConfig(filename=f"{args['logdir']}/cassandra.log",
+                            level=args['loglvl'], filemode='w')
         # Write to screen the location of the logging output
-        print(f'This is Cassandra version {__version__}.  Output will be logged to {argvals.logdir}/cassandra.log')
+        print(f"This is Cassandra version {__version__}.  Output will be logged to {args['logdir']}/cassandra.log")
 
-    cfgfile_name = argvals.ctlfile
+    cfgfile_name = args['ctlfile']
 
     # initialize the structures that will receive the data we are
     # parsing from the file
@@ -68,24 +67,51 @@ def bootstrap_sp(argvals):
 # end of bootstrap_sp
 
 
-def main(argvals):
+def main(args):
+    """
+    Cassandra main entry function.
+
+    :param args: Dictionary of command line arguments parsed by argparse.
+
+    This function starts up the Cassandra framework, selecting either the
+    single-processing or multi-processing mode, as required.  It's set up to be
+    run from the script block at the end of the module, but it could be called
+    from another program if desired.  To do that you will need to set up a
+    dictionary simulating the command-line parameters from the stand-alone
+    version.  The parameters that need to be supplied are:
+       ctlfile : Name of the configuration ("control") file.
+       mp      : Flag indicating whether we are running in MP mode
+       logdir  : Directory for log files. In SP mode this can be None, in 
+                 which case log outputs go to stdout
+       verbose : Flag indicating whether to produce debugging output.
+       quiet   : Flag indicating whether to suppress output except for warnings
+                 and error messages
+    
+    Keep in mind that this function will throw an exception if any of the
+    components fail (whether by exception or by returning a failure code).  It's
+    up to whatever code is calling it to handle any cleanup associated with the
+    failure.  This is especially important if you are running in MP mode, as
+    failing to do this cleanup can hang the entire calculation.
+
+    """
+
 
     # Set the appropriate logging level
     # NB: You MUST NOT call any logging functions until either bootstrap_mp
     #     or bootstrap_sp has been called.
-    if argvals.verbose:
-        argvals.loglvl = logging.DEBUG
-    elif argvals.quiet:
-        argvals.loglvl = logging.WARNING
+    if args['verbose']:
+        args['loglvl'] = logging.DEBUG
+    elif args['quiet']:
+        args['loglvl'] = logging.WARNING
     else:
-        argvals.loglvl = logging.INFO
+        args['loglvl'] = logging.INFO
 
-    if argvals.mp:
+    if args['mp']:
         # See notes in mp.py about side effects of importing that module.
         from cassandra.mp import bootstrap_mp, finalize
-        (component_list, cap_table) = bootstrap_mp(argvals)
+        (component_list, cap_table) = bootstrap_mp(args)
     else:
-        (component_list, cap_table) = bootstrap_sp(argvals)
+        (component_list, cap_table) = bootstrap_sp(args)
 
     # We will look up "general" in the cap_table and process any
     # global parameters here, but in the current version we don't
@@ -99,7 +125,7 @@ def main(argvals):
 
     # Wait for all component threads to complete before printing end
     # message.
-    if argvals.mp:
+    if args['mp']:
         # The RAB thread will always be first in the thread list
         component_threads = threads[1:]
     else:
@@ -114,7 +140,7 @@ def main(argvals):
     # if the RAB is present, it is always the first in the list.
     nfail = 0
 
-    if argvals.mp:
+    if args['mp']:
         reg_comps = component_list[1:]
         rab_comp = component_list[0]
     else:
@@ -140,7 +166,7 @@ def main(argvals):
 
     # If this is a multiprocessing calculation, then we need to
     # perform the finalization procedure
-    if argvals.mp:
+    if args['mp']:
         finalize(component_list[0], threads[0])
 
     logging.info("\nFIN.")
@@ -163,7 +189,7 @@ if __name__ == "__main__":
 
     try:
         # status is the number of component failures.
-        status = main(argvals)
+        status = main(vars(argvals))
     except Exception as err:
         if argvals.mp:
             from mpi4py import MPI
