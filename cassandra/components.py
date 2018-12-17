@@ -735,6 +735,11 @@ class FldgenComponent(ComponentBase):
      emulator   - RDS file containing the trained emulator to use for the
                   calculation. 
        ngrids   - Number of climate fields to generate. 
+      startyr   - Starting year for the climate fields
+        nyear   - Number of years in the climate fields.  This MUST match the
+                  number of years the emulator was trained on.
+                  TODO:  get this from the emulator when we read it in so that 
+                  we don't have to set it manually.
      scenario   - Hector scenario to use for the mean field calculation.
       RNGseed   - Optional seed for the R random number generator.  If omitted,
                   then the R instance will seed its RNG with whatever default it
@@ -742,6 +747,8 @@ class FldgenComponent(ComponentBase):
       a2mfrac   - monthly fraction dataset to use for monthly downscaling.  If 
                   omitted, the data is assumed to have been generated at monthly
                   resolution.
+     debugdir   - Location to write debug file output.  If omitted, no debug output 
+                  is produced.
 
     Capability dependencies:
        Tgav     - Global mean temperature.  Tgav is normally provided by
@@ -786,11 +793,21 @@ class FldgenComponent(ComponentBase):
         self.addcapability('gridded_pr_coord')
         self.addcapability('gridded_tas_coord')
 
+        
+    def finalize_parsing(self):
+        self.params['loadpkgs'] = util.parseTFstring(self.params['loadpkgs'])
+        self.params['ngrids'] = int(self.params['ngrids'])
+        self.params['startyr'] = int(self.params['startyr'])
+        self.params['nyear'] = int(self.params['nyear'])
+        
+        
     def run_component(self):
         """Run the fldgen and an2month R scripts."""
         from rpy2.robjects.packages import importr
         import rpy2.robjects as robjects
         import numpy as np
+        from rpy2.robjects import numpy2ri
+        numpy2ri.activate() # enable automatic conversion of numpy objects to R equivalents.
 
         if self.params['loadpkgs']:
             pkgdir = self.params["pkgdir"]
@@ -806,15 +823,15 @@ class FldgenComponent(ComponentBase):
         # Import fldgen and run the generator
         fldgen = importr('fldgen')
         emu = fldgen.loadmodel(self.params['emulator'])
-        if self.params.RNGseed is not None:
+        if self.params.get('RNGseed') is not None:
             setseed = robjects.r['set.seed']
-            setseed(self.params.RNGseed)
+            setseed(self.params['RNGseed'])
 
-        fullgrids_annual = self.run_fldgen(emu)
+        fullgrids_annual = self.run_fldgen(emu,fldgen)
 
-        coords = self.extract_coords(emu) 
+        coords = self.extract_coords(emu, fldgen) 
         
-        if self.params.a2mfrac is None:
+        if self.params.get('a2mfrac') is None:
             ## Data is already at monthly resolution; however, we do still
             ## need to transpose it so that months are in columns.
             fullgrids_monthly = {}
@@ -828,6 +845,21 @@ class FldgenComponent(ComponentBase):
         self.addresults('gridded_tas', fullgrids_monthly['tas'])
         self.addresults('gridded_pr_coord', coords['pr'])
         self.addresults('gridded_tas_coord', coords['tas'])
+
+        ## Produce debug output, if requested
+        ddir = self.params.get('debugdir')
+        if ddir is not None:
+            import os.path
+            import numpy as np
+            
+
+            for var in ['tas','pr']:
+                filestem = os.path.join(ddir, f'debug-{var}')
+                for i, m in enumerate(fullgrids_monthly[var]):
+                    ## Write debug output with months in rows, as it will be easier to visually scan that way.
+                    tasdata = np.transpose(m[0:10, 0:24])
+                    filename = f'{filestem}-{i}.csv'
+                    np.savetxt(filename, tasdata)
 
         return 0
 
@@ -843,29 +875,36 @@ class FldgenComponent(ComponentBase):
         import numpy as np
         
         ## Calculate residuals 
-        resids = fldgen.generate_TP_resids(emu, self.params.ngrids), 
+        resids = fldgen.generate_TP_resids(emu, self.params['ngrids'])
 
         ## Get global mean temperatures.  This is returned as a dataframe
         ## containing multiple scenarios, so we need to filter it down to the
         ## one we want.
         tgavdf = self.fetch('Tgav')
-        if self.params.scenario not in tgavdf['scenario']:
-            raise RuntimeError(f'Requested scenario {scenario} not in Tgav results.')
-        tgavdf = tgavdf[tgavdf['scenario'] == self.params.scenario].loc[:, ]
-        year = tgavdf['year']
+        scen = self.params['scenario']
+        if scen not in tgavdf['scenario'].values:
+            raise RuntimeError(f'Requested scenario {scen} not in Tgav results.')
+        tgavdf = tgavdf[tgavdf['scenario'] == scen].loc[:, ]
+
+        startyr = self.params['startyr']
+        endyr = startyr + self.params['nyear']
+        ## We need to filter this down to just the years we are going to use
+        tgavdf = tgavdf[np.logical_and(tgavdf['year'] >= startyr, tgavdf['year'] < endyr)].loc[:, ]
+        
+        year = tgavdf['year'].values
         perm = np.argsort(year)
-        tgav = tgavdf['variable'][perm] 
+        tgav = tgavdf['value'].values[perm]
 
         fullgrids = fldgen.generate_TP_fullgrids(emu, resids, tgav)
 
-        ## fullgrids has temperature and precipitation grids in it; in R notation they
-        ## are stored in fullgrids[[1]]$tas and fullgrids[[1]]$pr.  We don't care about
+        ## fullgrids is a list of paired temperature and precipitation grids. in R notation they
+        ## are stored in fullgrids$fullgrids[[i]]$tas and fullgrids$fullgrids[[i]]$pr.  We don't care about
         ## anything else in the fullgrids structure above.  (Remember x[[1]] in R is
         ## x[0] in python.)
-        fullgrids = dict(fullgrids[0].items())
+        gridstructs = fullgrids.rx2('fullgrids')
 
-        tas = [np.asarray(x) for x in fullgrids['tas']]
-        pr = [np.asarray(x) for x in fullgrids['pr']]
+        tas = [np.asarray(gs.rx2('tas')) for gs in gridstructs]
+        pr = [np.asarray(gs.rx2('pr')) for gs in gridstructs]
 
         return {'tas':tas, 'pr':pr}
 
@@ -915,7 +954,7 @@ class FldgenComponent(ComponentBase):
         rslt = {} 
         for var in annual_flds:
             time = np.asarray(annual_flds[var][0]).shape[0] # there is probably an easier way to do this.
-            monthly = an2month.downscaling_component_api(self.params.a2mfrac, annual_flds[var],
+            monthly = an2month.downscaling_component_api(self.params['a2mfrac'], annual_flds[var],
                                                          coords[var], time, var)
 
             rslt[var] = [np.transpose(np.asarray(x)) for x in monthly]
@@ -944,6 +983,8 @@ class HectorStubComponent(ComponentBase):
     scenarios : comma separated list of scenarios to include
                 e.g.: rcp26,rcp45
                 If omitted, all four rcp scenarios are included.
+    T0        : Preindustrial temperature.  This must be added to the temperature
+                anomalies produced by Hector to get real temperatures.
 
     """
 
@@ -974,7 +1015,9 @@ class HectorStubComponent(ComponentBase):
 
         retcols = ['year', 'scenario', 'variable', 'value', 'units']
 
-        self.addresults('Tgav', scendata[scendata['variable'] == 'Tgav'].loc[:, retcols])
+        tgav = scendata[scendata['variable'] == 'Tgav'].loc[:, retcols]
+        tgav['value'] += float(self.params['T0']) # convert anomaly to temperature
+        self.addresults('Tgav', tgav)
         self.addresults('atm-co2', scendata[scendata['variable'] == 'Ca'].loc[:, retcols])
         self.addresults('Ftot', scendata[scendata['variable'] == 'Ftot'].loc[:, retcols])
 
