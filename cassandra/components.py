@@ -25,6 +25,8 @@ TethysComponent       - Run the Tethys spatiotemporal global water use
 
 XanthosComponent      - Run the Xanthos global hydrology model.
 
+FldgenComponent       - Run the fldgen climate scenario generator.
+
 HectorStubComponent   - Serve Hector output for RCP scenarios.
 
 DummyComponent        - A simple component class for tests.
@@ -712,21 +714,77 @@ class XanthosComponent(ComponentBase):
 
 
 class FldgenComponent(ComponentBase):
-    """Class for the precipitation and temperature grids
+    """Run the fldgen climate field generator.
 
-    This component makes use of the fldgen code. That code lives in its
-    own package and must be installed independently.
+    This component makes use of the fldgen and an2month R packages. They must
+    either be installed in the user's R library, or they must be available to
+    load separately.
+
+    The current version of this component requires that the emulator have been
+    pretrained on the ESM data and saved as an RDS file.  Eventually we will
+    support training the emulator as part of the coupled calculation, but the
+    pretraining case seemed likely to be the more common one, so we started with
+    that.
 
     params:
-       workdir  - working directory (location of frontEnd_grandExp code)
+      loadpkgs  - Flag indicating whether the fldgen and an2month packages need
+                  to be explicitly loaded.  If false, those packages must be
+                  preinstalled in the user's R library. 
+       pkgdir   - Directory containing R package repositories for fldgen and
+                  an2month (ignored if loadpkgs is False).
+     emulator   - RDS file containing the trained emulator to use for the
+                  calculation. 
+       ngrids   - Number of climate fields to generate. 
+     scenario   - Hector scenario to use for the mean field calculation.
+      RNGseed   - Optional seed for the R random number generator.  If omitted,
+                  then the R instance will seed its RNG with whatever default it
+                  normally uses.
+      a2mfrac   - monthly fraction dataset to use for monthly downscaling.  If 
+                  omitted, the data is assumed to have been generated at monthly
+                  resolution.
 
-    results: pr and temp grids
+    Capability dependencies:
+       Tgav     - Global mean temperature.  Tgav is normally provided by
+                  scenario.  This component ignores the scenario designation.
+                  If multiple scenarios are present, it takes the first one.
+
+    results: precipitation (pr) and temperature (tas) grids and coordinate
+    matrix.  The results are organized thus:
+
+    capability 'gridded_pr': list of matrices.  Each matrix is one of the
+    generated precipitation fields, with grid cells in rows and months in
+    columns.  TODO: document units of precip (kg/m^2/s ?)
+
+    capability 'gridded_tas': list of matrices.  Each matrix is one of the
+    generated temperature fields, with grid cells in rows and months in
+    columns.  TODO: document units of temperature (K ?)
+
+    capability 'gridded_tas_coord': Matrix of lat/lon coordinates for the
+    temperature grid cells.  The rows are in the same order as the rows in the
+    gridded data; the two columns are lat, lon, respectively.
+
+    capability 'gridded_pr_coord': Matrix of lat/lon coordinates for the precip
+    grid cells.  The rows are in the same order as the rows in the gridded data;
+    the two columns are lat, lon, respectively.  This is exactly the same matrix
+    as the 'gridded_tas_coord' matrix; the additional capability is provided as
+    a convenience in case there are components that do not assume that
+    temperature and precipitation are on the same grid.
+
+    Note that although the temperature and precipitation are provided separately
+    so that components that need only one or the other can fetch just what they
+    need, the grids for the two variables are paired.  That is, tas[0] goes with
+    pr[0], tas[1] with pr[1], and so on.  Mixing the tas and pr grids from two
+    different realizations (e.g., tas[0] wth pr[2]) is not valid and should be
+    avoided.
+
     """
 
     def __init__(self, cap_tbl):
         super(FldgenComponent, self).__init__(cap_tbl)
         self.addcapability("gridded_pr")
         self.addcapability("gridded_tas")
+        self.addcapability('gridded_pr_coord')
+        self.addcapability('gridded_tas_coord')
 
     def run_component(self):
         """Run the fldgen and an2month R scripts."""
@@ -734,63 +792,135 @@ class FldgenComponent(ComponentBase):
         import rpy2.robjects as robjects
         import numpy as np
 
-        workdir = self.params["workdir"]
+        if self.params['loadpkgs']:
+            pkgdir = self.params["pkgdir"]
 
-        an2month = os.path.join(workdir, "an2month")
-        fldgen = os.path.join(workdir, "fldgen")
-        gexp_funs = os.path.join(workdir, "frontEnd_grandExp/grand_experiment_functions.R")
-        emulator_mapping = os.path.join(workdir, "input", "emulator_mapping.csv")
-        hector_runs = os.path.join(workdir, "input", "hector_tgav-rcp45.csv")
+            an2month = os.path.join(workdir, "an2month")
+            fldgen = os.path.join(workdir, "fldgen")
 
-        devtools = importr("devtools")
-        devtools.load_all(an2month)
-        devtools.load_all(fldgen)
+            devtools = importr("devtools")
+            devtools.load_all(an2month)
+            devtools.load_all(fldgen)
 
-        rsource = robjects.r["source"]
-        rsource(gexp_funs)
 
-        grand_experiment = robjects.r["grand_experiment"]
-        r = grand_experiment(mapping=emulator_mapping, tgavSCN=hector_runs, xanthos_dir='', N=1)
+        # Import fldgen and run the generator
+        fldgen = importr('fldgen')
+        emu = fldgen.loadmodel(self.params['emulator'])
+        if self.params.RNGseed is not None:
+            setseed = robjects.r['set.seed']
+            setseed(self.params.RNGseed)
 
-        # r is a complex nested structure:
-        # Emulator1 (e.g. ipsl-cm5a-lr)
-        # -- Scenario1 (e.g. rcp45)
-        # -- -- RunNum1 (e.g. 1)
-        # -- -- -- Monthly Precipitation
-        # -- -- -- -- Precip Data (months x 67420)
-        # -- -- -- -- Precip Coordinates (3 (cell, lon, lat) x 67420)
-        # -- -- -- -- Precip Units (e.g. mm_month-1)
-        # -- -- -- Monthly Temperature
-        # -- -- -- -- Temp Data (months x 67420)
-        # -- -- -- -- Temp Coordinates (3 (cell, lon, lat) x 67420)
-        # -- -- -- -- Temp Units (e.g. C)
-        # -- -- RunNum2
-        # -- -- -- ...
-        # -- Scenario2
-        # -- -- ...
-        # Emulator2
-        # -- ...
-        # ...
-        emulator_name = r[0]
-        run_name = emulator_name[0]
-        run_N = run_name[0]
+        fullgrids_annual = self.run_fldgen(emu)
 
-        fldgen_pr = {
-            'data': np.asarray(run_N[0][0]),
-            'coords': np.asarray(run_N[0][1]),
-            'units': run_N[0][2][0]  # All R strings are in vectors; take 1st element
-        }
+        coords = self.extract_coords(emu) 
+        
+        if self.params.a2mfrac is None:
+            ## Data is already at monthly resolution; however, we do still
+            ## need to transpose it so that months are in columns.
+            fullgrids_monthly = {}
+            fullgrids_monthly['pr'] = [np.transpose(np.asarray(x)) for x in fullgrids_annual['pr']]
+            fullgrids_monthly['tas'] = [np.transpose(np.asarray(x)) for x in fullgrids_annual['tas']]
+        else:
+            fullgrids_monthly = self.run_monthlyds(fullgrids_annual, coords)
+        
 
-        fldgen_tas = {
-            'data': np.asarray(run_N[1][0]),
-            'coords': np.asarray(run_N[1][1]),
-            'units': run_N[1][2][0]
-        }
-
-        self.addresults('gridded_pr', fldgen_pr)
-        self.addresults('gridded_tas', fldgen_tas)
+        self.addresults('gridded_pr', fullgrids_monthly['pr'])
+        self.addresults('gridded_tas', fullgrids_monthly['tas'])
+        self.addresults('gridded_pr_coord', coords['pr'])
+        self.addresults('gridded_tas_coord', coords['tas'])
 
         return 0
+
+    def run_fldgen(self, emu, fldgen):
+        """Run the fldgen calculation and return the results.
+
+        :param emu: Fldgen emulator structure 
+        :param fldgen: Fldgen package handle from rpy2
+        :return: Dictionary with entries 'tas' and 'pr'.  Each entry is a list
+                 of numpy arrays. 
+
+        """
+        import numpy as np
+        
+        ## Calculate residuals 
+        resids = fldgen.generate_TP_resids(emu, self.params.ngrids), 
+
+        ## Get global mean temperatures.  This is returned as a dataframe
+        ## containing multiple scenarios, so we need to filter it down to the
+        ## one we want.
+        tgavdf = self.fetch('Tgav')
+        if self.params.scenario not in tgavdf['scenario']:
+            raise RuntimeError(f'Requested scenario {scenario} not in Tgav results.')
+        tgavdf = tgavdf[tgavdf['scenario'] == self.params.scenario].loc[:, ]
+        year = tgavdf['year']
+        perm = np.argsort(year)
+        tgav = tgavdf['variable'][perm] 
+
+        fullgrids = fldgen.generate_TP_fullgrids(emu, resids, tgav)
+
+        ## fullgrids has temperature and precipitation grids in it; in R notation they
+        ## are stored in fullgrids[[1]]$tas and fullgrids[[1]]$pr.  We don't care about
+        ## anything else in the fullgrids structure above.  (Remember x[[1]] in R is
+        ## x[0] in python.)
+        fullgrids = dict(fullgrids[0].items())
+
+        tas = [np.asarray(x) for x in fullgrids['tas']]
+        pr = [np.asarray(x) for x in fullgrids['pr']]
+
+        return {'tas':tas, 'pr':pr}
+
+
+    def extract_coords(self, emu, fldgen):
+        """Extract the coordinate structure from the emulator
+
+        :param emu: Fldgen emulator structure.
+        :param fldgen: Fldgen package structure from rpy2.
+        :return: Dictionary with entries 'tas' and 'pr'.  Each is a matrix of coordinates
+                 for each grid cell, with cells in rows and latitude, longitude in the two
+                 columns.
+
+        """
+
+        import numpy as np
+        griddataT = emu[0]
+        griddataP = emu[1]
+        coords = {}
+        for name, griddata in zip(['tas','pr'], [griddataT, griddataP]):
+            gd = dict(griddata.items())
+            try:
+                coord = np.asarray(gd['coord'])
+            except KeyError:
+                ## If the grid is regular, then fldgen doesn't store a coordinate
+                ## array.  Use the coord_array function tocreate one.
+                coord = np.asarray(fldgen.coord_array(gd['lat'], gd['lon']))
+            coords[name] = coord
+
+        return coords
+
+    def run_monthlyds(self, annual_flds, coords):
+        """Run the monthly downscaling calculation
+
+        :param annual_flds: Structure returned from run_fldgen
+        :param coords: Coordinate matrix returned from fldgen
+        :return: Dictionary with 'pr' and 'tas' entries. Each entry is a list of 
+                 matrices of field data at monthly resolution (grid cells in rows, 
+                 months in columns)
+        """
+
+        from rpy2.robjects.packages import importr
+        import numpy as np
+
+        an2month = importr('an2month')
+        
+        rslt = {} 
+        for var in annual_flds:
+            time = np.asarray(annual_flds[var][0]).shape[0] # there is probably an easier way to do this.
+            monthly = an2month.downscaling_component_api(self.params.a2mfrac, annual_flds[var],
+                                                         coords[var], time, var)
+
+            rslt[var] = [np.transpose(np.asarray(x)) for x in monthly]
+
+        return rslt
 
 
 class HectorStubComponent(ComponentBase):
