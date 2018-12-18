@@ -953,11 +953,17 @@ class FldgenComponent(ComponentBase):
         
         rslt = {} 
         for var in annual_flds:
-            time = np.asarray(annual_flds[var][0]).shape[0] # there is probably an easier way to do this.
+            ntime = np.asarray(annual_flds[var][0]).shape[0] # there is probably an easier way to do this.
+            time = np.arange(ntime) + self.params['startyr'] - 1
             monthly = an2month.downscaling_component_api(self.params['a2mfrac'], annual_flds[var],
                                                          coords[var], time, var)
 
+            if var == 'pr':
+                ## If this is precipitation, convert units.
+                monthly = [an2month.pr_conversion(x) for x in monthly]
+            
             rslt[var] = [np.transpose(np.asarray(x)) for x in monthly]
+            logging.debug(f'Result for {var}: len = {len(rslt[var])}. Shape = {rslt[var][0].shape}')
 
         return rslt
 
