@@ -14,8 +14,11 @@ class TestHectorStub(unittest.TestCase):
 
         capability_table = {}
 
+        self.T0 = 287
+        
         self.hstub = HectorStubComponent(capability_table)
         self.hstub.addparam('scenarios', ['rcp26', 'rcp45', 'rcp60', 'rcp85'])
+        self.hstub.addparam('T0', str(self.T0))
         self.hstub.finalize_parsing()
         self.hstub.run_component()
 
@@ -27,10 +30,12 @@ class TestHectorStub(unittest.TestCase):
         self.assertEqual(list(tgav.columns),
                          ['year', 'scenario', 'variable', 'value', 'units'])
 
+        hout2100 = [1.541, 2.510, 3.114, 4.604]
+        tvals2100 = [x+self.T0 for x in hout2100]
         tgav2100 = tgav[tgav['year'] == 2100]
         self.assertEqual(tgav2100.shape, (4, 5))
         self.assertEqual(list(tgav2100['value']),
-                         [1.541, 2.510, 3.114, 4.604])
+                         tvals2100)
 
     def testco2(self):
         """Test that atmospheric CO2 data was read correctly."""
