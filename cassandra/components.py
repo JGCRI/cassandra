@@ -619,7 +619,7 @@ class XanthosComponent(ComponentBase):
     model (https://github.com/JGCRI/xanthos).
 
     The two main inputs to Xanthos are gridded monthly precipitation and
-    temperature. If these capabilities are provided by another component,
+    temperature. If these capabilities are provided by another component
     Xanthos will use them as arguments, otherwise it will expect them to be
     specified in the Xanthos configuration file. It is assumed the order of
     the grids in the precipitation and temperature lists match one another.
@@ -665,8 +665,8 @@ class XanthosComponent(ComponentBase):
         import xanthos
 
         config_file = self.params["config_file"]
-
         xth = xanthos.Xanthos(config_file)
+
         args = {}
         gridded_runoff = []
 
@@ -682,6 +682,7 @@ class XanthosComponent(ComponentBase):
             xth_results = xth.execute(args)
             gridded_runoff.append(xth_results.Q)
 
+        # Run Xanthos for each pair of precipitation and temperature grids
         for pr, tas in zip(pr_grids, tas_grids):
             args['PrecipitationFile'] = self.prep_for_xanthos(pr, pr_coord)
             args['trn_tas'] = self.prep_for_xanthos(tas, tas_coord) - 273.15  # K to C
@@ -698,8 +699,8 @@ class XanthosComponent(ComponentBase):
         Retrieve Xanthos grid cells from alternately indexed vectors.
 
         params:
-          monthly_data - Input data for Xanthos as numpy array (cells x months)
-                coords - Lat/lon array corresponding to monthly_data
+          monthly_data  - Input data for Xanthos as numpy array (cells x months)
+                coords  - Lat/lon array corresponding to monthly_data
 
         returns:
           2d array of Xanthos cells by month
