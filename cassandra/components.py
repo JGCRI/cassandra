@@ -615,13 +615,28 @@ class TethysComponent(ComponentBase):
 class XanthosComponent(ComponentBase):
     """Class for the global hydrologic model Xanthos
 
-    This component makes use of the Xanthos package, an open-source
-    hydrologic model.
+    This component makes use of the Xanthos package, an open-source hydrologic
+    model (https://github.com/JGCRI/xanthos).
 
-    For more information: https://github.com/JGCRI/xanthos
+    The two main inputs to Xanthos are gridded monthly precipitation and
+    temperature. If these capabilities are provided by another component,
+    Xanthos will use them as arguments, otherwise it will expect them to be
+    specified in the Xanthos configuration file. It is assumed the order of
+    the grids in the precipitation and temperature lists match one another.
 
     params:
-       config_file - path to Xanthos config file
+          config_file  - Path to Xanthos config file
+
+    Capability dependencies (all optional):
+           gridded_pr  - List of gridded monthly precipitation by grid cell
+          gridded_tas  - List of gridded monthly temperature by grid cell
+     gridded_pr_coord  - Matrix of lat/lon coordinates for the precip grid cells
+    gridded_tas_coord  - Matrix of lat/lon coordinates for the tas grid cellss
+
+    results:
+       gridded_runoff  - Capability 'gridded_runoff', a list of runoff matrices,
+                         with the units and aggregation level specified in the
+                         Xanthos config file
     """
 
     def __init__(self, cap_tbl):
@@ -652,65 +667,59 @@ class XanthosComponent(ComponentBase):
         config_file = self.params["config_file"]
 
         xth = xanthos.Xanthos(config_file)
-
         args = {}
+        gridded_runoff = []
 
-        # Wait for other components to produce precipitation and
-        # temperature data (as pandas DataFrames), if provided
-        self.add_args_from_capability(args, 'PrecipitationFile', 'gridded_pr', 'mm_month-1')
-        self.add_args_from_capability(args, 'trn_tas', 'gridded_tas', 'C')
+        # Other components should produce gridded climate data as a list of 2d numpy arrays
+        cap_names = ['gridded_pr', 'gridded_tas', 'gridded_pr_coord', 'gridded_tas_coord']
+        if all(cap in self.cap_tbl for cap in cap_names):
+            pr_grids = self.fetch('gridded_pr')
+            tas_grids = self.fetch('gridded_tas')
+            pr_coord = self.fetch('gridded_pr_coord')
+            tas_coord = self.fetch('gridded_tas_coord')
+        else:
+            pr_grids = tas_grids = []
+            xth_results = xth.execute(args)
+            gridded_runoff.append(xth_results.Q)
 
-        xth_results = xth.execute(args)
+        for pr, tas in zip(pr_grids, tas_grids):
+            args['PrecipitationFile'] = self.prep_for_xanthos(pr, pr_coord)
+            args['trn_tas'] = self.prep_for_xanthos(tas, tas_coord) - 273.15  # K to C
+            xth_results = xth.execute(args)
+            gridded_runoff.append(xth_results.Q)
 
-        # Add runoff (Q) results from xanthos to the gridded_runoff capability
-        self.addresults("gridded_runoff", xth_results.Q)
+        self.addresults("gridded_runoff", gridded_runoff)
 
         return 0
 
-    def add_args_from_capability(self, args, arg_name, cap_name, units=None):
-        """Get Xanthos parameters from another capability.
-
-        If the no component provides the requested capability, no arguments are added.
-
-        params:
-          args: Reference to dictionary passed to Xanthos
-          arg_name: Name of argument to add
-          cap_name: Name of capability with required value
-          units: Optional string to use to assert correct units
-        """
-        if cap_name in self.cap_tbl:
-            arg_val = self.fetch(cap_name)
-            assert units is None or arg_val['units'] == units
-            args[arg_name] = self.prep_for_xanthos(arg_val)
-
-    def prep_for_xanthos(self, monthly_data):
-        """Convert a fldgen output array to Xanthos' expected input format.
+    def prep_for_xanthos(self, monthly_data, coords):
+        """Convert climate data to Xanthos' expected input format.
 
         Retrieve Xanthos grid cells from alternately indexed vectors.
 
-        Convert spatial data from a list of numeric vectors (each list element is one
-        month) to the input format expected by Xanthos (land cell x months).
-
         params:
-          monthly_data: Input data for xanthos as numpy array (cells x months)
+          monthly_data - Input data for Xanthos as numpy array (cells x months)
+                coords - Lat/lon array corresponding to monthly_data
 
         returns:
           2d array of Xanthos cells by month
 
         """
-        ycolnames = c('index', 'lat', 'lon')
-        ycells = pd.DataFrame(monthly_data['data'].T, columns=ycolnames)
+        coords = pd.DataFrame(coords, columns=['lat', 'lon'])
 
-        bothcells = ycells.merge(self.cell_map, on=['lat', 'lon'])
+        # The input data must have the same number of grid cells as Xanthos
+        assert len(coords.index) == len(self.cell_map.index)
 
-        # Order by Xanthos cell id for indexing
-        bothcells.sort_values(by='cell_id', inplace=True)
+        # Map the Xanthos coordinate indices to the input coordinates
+        cell_id_map = coords.merge(self.cell_map, on=['lat', 'lon'])
 
-        # Re-order the data to correct order by extracting with the cell index
-        cells = monthly_data[:, bothcells.index.astype(int)]
+        # The 'cell_id' column now says the id of the Xanthos cell each row of
+        # the input data corresponds to. The ids start at 1, so to re-order the
+        # input data to the Xanthos order, we can just index by one less than
+        # the value of the 'cell_id' column.
+        ordered_data = monthly_data[cell_id_map['cell_id'] - 1, :]
 
-        # Rows and columns need to be flipped
-        return cells.T
+        return ordered_data
 
 
 class FldgenComponent(ComponentBase):
