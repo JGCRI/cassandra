@@ -635,8 +635,8 @@ class XanthosComponent(ComponentBase):
 
     results:
        gridded_runoff  - Capability 'gridded_runoff', a list of runoff matrices,
-                         with the units and aggregation level specified in the
-                         Xanthos config file
+                         (gridcells x timestep) with the units and aggregation
+                         level specified in the Xanthos config file
     """
 
     def __init__(self, cap_tbl):
@@ -667,7 +667,6 @@ class XanthosComponent(ComponentBase):
         config_file = self.params["config_file"]
         xth = xanthos.Xanthos(config_file)
 
-        args = {}
         gridded_runoff = []
 
         # Other components should produce gridded climate data as a list of 2d numpy arrays
@@ -677,16 +676,16 @@ class XanthosComponent(ComponentBase):
             tas_grids = self.fetch('gridded_tas')
             pr_coord = self.fetch('gridded_pr_coord')
             tas_coord = self.fetch('gridded_tas_coord')
-        else:
-            pr_grids = tas_grids = []
-            xth_results = xth.execute(args)
-            gridded_runoff.append(xth_results.Q)
 
-        # Run Xanthos for each pair of precipitation and temperature grids
-        for pr, tas in zip(pr_grids, tas_grids):
-            args['PrecipitationFile'] = self.prep_for_xanthos(pr, pr_coord)
-            args['trn_tas'] = self.prep_for_xanthos(tas, tas_coord) - 273.15  # K to C
-            xth_results = xth.execute(args)
+            # Run Xanthos for each pair of precipitation and temperature grids
+            args = {}
+            for pr, tas in zip(pr_grids, tas_grids):
+                args['PrecipitationFile'] = self.prep_for_xanthos(pr, pr_coord)
+                args['trn_tas'] = self.prep_for_xanthos(tas, tas_coord) - 273.15  # K to C
+                xth_results = xth.execute(args)
+                gridded_runoff.append(xth_results.Q)
+        else:
+            xth_results = xth.execute()
             gridded_runoff.append(xth_results.Q)
 
         self.addresults("gridded_runoff", gridded_runoff)
