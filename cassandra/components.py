@@ -625,7 +625,8 @@ class XanthosComponent(ComponentBase):
     the grids in the precipitation and temperature lists match one another.
 
     params:
-          config_file  - Path to Xanthos config file
+          config_file    - Path to Xanthos config file
+          OutputNameStr  - Name for the directory to create for Xanthos outputs
 
     Capability dependencies (all optional):
            gridded_pr  - List of gridded monthly precipitation by grid cell
@@ -679,6 +680,9 @@ class XanthosComponent(ComponentBase):
 
             # Run Xanthos for each pair of precipitation and temperature grids
             args = {}
+            if self.params.get('OutputNameStr') is not None:
+                args['OutputNameStr'] = self.params['OutputNameStr']
+
             for pr, tas in zip(pr_grids, tas_grids):
                 args['PrecipitationFile'] = self.prep_for_xanthos(pr, pr_coord)
                 args['trn_tas'] = self.prep_for_xanthos(tas, tas_coord) - 273.15  # K to C
@@ -817,10 +821,11 @@ class FldgenComponent(ComponentBase):
         numpy2ri.activate()  # enable automatic conversion of numpy objects to R equivalents.
 
         if self.params['loadpkgs']:
+            import os
             pkgdir = self.params["pkgdir"]
 
-            an2month = os.path.join(workdir, "an2month")
-            fldgen = os.path.join(workdir, "fldgen")
+            an2month = os.path.join(pkgdir, "an2month")
+            fldgen = os.path.join(pkgdir, "fldgen")
 
             devtools = importr("devtools")
             devtools.load_all(an2month)
@@ -841,8 +846,8 @@ class FldgenComponent(ComponentBase):
             # Data is already at monthly resolution; however, we do still
             # need to transpose it so that months are in columns.
             fullgrids_monthly = {}
-            fullgrids_monthly['pr'] = [np.transpose(np.asarray(x)) for x in fullgrids_annual['pr']]
-            fullgrids_monthly['tas'] = [np.transpose(np.asarray(x)) for x in fullgrids_annual['tas']]
+            fullgrids_monthly['pr'] = [np.transpose(np.asarray(x, dtype=np.float32)) for x in fullgrids_annual['pr']]
+            fullgrids_monthly['tas'] = [np.transpose(np.asarray(x, dtype=np.float32)) for x in fullgrids_annual['tas']]
         else:
             fullgrids_monthly = self.run_monthlyds(fullgrids_annual, coords)
 
@@ -965,7 +970,7 @@ class FldgenComponent(ComponentBase):
                 # If this is precipitation, convert units.
                 monthly = [an2month.pr_conversion(x) for x in monthly]
 
-            rslt[var] = [np.transpose(np.asarray(x)) for x in monthly]
+            rslt[var] = [np.transpose(np.asarray(x, dtype=np.float32)) for x in monthly]
             logging.debug(f'Result for {var}: len = {len(rslt[var])}. Shape = {rslt[var][0].shape}')
 
         return rslt
