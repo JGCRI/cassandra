@@ -164,7 +164,8 @@ def distribute_assignments_supervisor(args):
     except ValueError as e:
         raise RuntimeError("Config file must have a '[Global]' section") from e
 
-    section_weights = [config[s].get('mp.weight', 1.0) for s in section_names]
+    section_weights = [float(config[s].get('mp.weight', 1.0)) for s in section_names]
+    logging.debug(f'section_weights: {section_weights}')
     name_weight = zip(section_names, section_weights)
     section_names = [s[0] for s in sorted(name_weight, key=lambda x:x[1], reverse=True)]
 
