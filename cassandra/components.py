@@ -807,6 +807,7 @@ class FldgenComponent(ComponentBase):
         self.addcapability('gridded_tas_coord')
 
     def finalize_parsing(self):
+        super(FldgenComponent, self).finalize_parsing()
         self.params['loadpkgs'] = util.parseTFstring(self.params['loadpkgs'])
         self.params['ngrids'] = int(self.params['ngrids'])
         self.params['startyr'] = int(self.params['startyr'])
