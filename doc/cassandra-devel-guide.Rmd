@@ -1,0 +1,125 @@
+---
+title: "Cassandra Component Developer Guide"
+author: "Robert Link"
+date: "3/16/2019"
+output: 
+  revealjs::revealjs_presentation:
+    transition: none
+    theme: night
+    highlight: zenburn
+    center: false
+    self_contained: true
+    reveal_options:
+      slideNumber: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Here's how it is
+
+* Components advertise capabilities; other components use these capabilities to find the data they want.
+* Components run _concurrently_. When a component asks for data, if that data isn't ready yet, it waits 
+  until the data is available.
+* Right now there's no iteration.  Components run until they're finished, and only then is their data
+  available to the rest of the system.  We hope to remove this limitation later this year.
+* Components can run on the same host, or can be split up over several hosts using MPI.
+* The Python class `ComponentBase` provides all the basic infrastructure for letting components
+  work together.
+
+## The methods you will meet in Cassandra (I)
+
+* Internal methods (don't change or call these)
+    * `run()`, `run_component_wrapper()`, `addparam()`
+* Methods you can call but shouldn't change  
+    * `addcapability()` : call with the name of a capability you want to advertise.
+    * `addresults()` : call with the name of one of your capabilities and the results for that capability.
+    * `fetch()` : call with the name of a capability for another component.  Do _not_ call this with
+      the name of one of your own capabilities.  You won't like what happens.
+      
+## The methods you will meet in Cassandra (II)
+* Methods you can extend (be sure to call the base class method).  You won't call these; they will get
+  called for you.
+    * `__init__()` : Component initializer. Setup anything that doesn't need information from your 
+      component's section of the config file here.
+    * `finalize_parsing()` : Do any remaining setup after your component's section of the config file 
+      has been parsed here.
+* Methods you can (must) override (you won't call the base class method). These will also be called for
+  you at the appropriate time.
+    * `run_component()` : This is where all the work for your component will happen.
+
+## Member data in a component
+* Framework internals.  _You can't touch these!_
+    * `cap_tbl`, `condition`, `status`, `results`
+* Yours to do with as you like.
+    * `params` : Parameters parsed from your component's section of the config file.
+* Everything else.
+    * You can create component data by assigning to `self.whatever`.
+    * Create whatever data might be useful, but **DON'T REASSIGN ANY OF THE DATA MENTIONED ABOVE**.
+    
+    
+## Things to remember when writing a component (I)
+
+* Extending `__init__` and `finalize_parsing`
+    * Your version of these _must_ call the base class method as the first thing they 
+      do.  
+    * If one of them doesn't need to be extended you can omit it entirely.  Consider writing 
+      a comment explaining that it wasn't needed.
+    * Use `self.addcapability(capability)` to declare a capability to expose to the rest of the 
+      system.  This can be done in either of these two methods.  It _can't_ be done during 
+      `run_component`.
+      
+## Things to remember when writing a component (II)
+
+* Overriding `run_component`
+    * You _must_ overrride this method.  That means you _must not_ call the base class method.
+    * Use `self.fetch(capability)` to get data advertised by other components.  If the data from
+      the other component isn't ready yet, `fetch` will wait until it is.  When it returns, the
+      return value is the data requested.
+    * Use `self.addresults(capability, data)` to make your results available to the rest of the framework.
+    * Your version of the method must return an integer.  Its value must be 0 (zero) if the run 
+      succeeded.  Any nonzero value will be interpreted as a failure code.
+      
+## Adding a component
+
+For now we're just adding components to `components.py`.  
+
+```python
+class MyComponent(ComponentBase):
+    "Your doc string"
+    def __init__(self, cap_tbl):
+        super(MyComponent, self).__init__(cap_tbl)
+        ## your initialization code
+    def finalize_parsing(self):
+        super(MyComponent, self).finalize_parsing()
+        ## your finalization code, if any
+    def run_component(self):
+        ## All your component code
+```
+Also, add your component to the table of available components in `compfactory.py`
+```python
+_available_components = {
+    'Global': comp.GlobalParamsComponent,
+    'FldgenComponent' : comp.FldgenComponent,
+    'DummyComponent': comp.DummyComponent,
+    'MyComponent' : comp.MyComponent,   # <- Leave a comma for the next dev kthx.
+}
+```
+
+## Setting up and running Cassandra
+
+From the Cassandra top-level directory:
+```
+pip install -e .
+```
+
+(demo from the cassandra examples dir)
+
+## Other topics
+
+* Logging
+* Optional dependencies
+* Exceptions
+    * `CapabilityNotFound`
+
