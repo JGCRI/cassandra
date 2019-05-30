@@ -1,5 +1,5 @@
 configobj>=5.0.6
 pandas>=0.20
-gcam_reader @ git+https://github.com/JGCRI/gcam_reader.git
-tethys @ git+https://github.com/JGCRI/tethys.git
-xanthos @ git+https://github.com/JGCRI/xanthos.git
+gcam_reader @ https://github.com/JGCRI/gcam_reader.git@master
+tethys @ https://github.com/JGCRI/tethys.git@master
+xanthos @ https://github.com/JGCRI/xanthos.git@master

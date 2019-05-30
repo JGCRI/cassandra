@@ -31,11 +31,6 @@ setup(
         'xanthos': ["xanthos>=2.3.1"],
         'tethys': ["tethys>=1.2.0"],
     },
-    dependency_links=[
-        'git+https://github.com/JGCRI/gcam_reader@master#egg=gcam_reader-1.0.0',
-        'git+https://github.com/JGCRI/tethys@master#egg=tethys-1.2.0',
-        'git+https://github.com/JGCRI/xanthos@master#egg=xanthos-2.3.1',
-    ],
     classifiers=[
         "Programming Language :: Python :: 3.6"
         "Programming Language :: Python :: 3.7"
