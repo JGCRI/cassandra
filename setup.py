@@ -28,6 +28,7 @@ setup(
     long_description=readme(),
     install_requires=get_requirements(),
     extras_require={
+        'gcam_reader': ["gcam_reader>=1.0.0"],
         'xanthos': ["xanthos>=2.3.1"],
         'tethys': ["tethys>=1.2.0"],
     },

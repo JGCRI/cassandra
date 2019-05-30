@@ -6,6 +6,9 @@ matrix:
       dist: xenial
 cache: pip
 install:
+  - pip install git+https://github.com/JGCRI/gcam_reader
+  - pip install git+https://github.com/JGCRI/tethys
+  - pip install git+https://github.com/JGCRI/xanthos
   - pip install .
 script:
   - python -m unittest
