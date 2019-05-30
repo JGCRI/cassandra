@@ -6,6 +6,6 @@ matrix:
       dist: xenial
 cache: pip
 install:
-  - pip install --process-dependency-links .[xanthos,tethys]
+  - pip install .
 script:
   - python -m unittest

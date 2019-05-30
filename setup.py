@@ -10,7 +10,7 @@ def readme():
 
 def get_requirements():
     with open('requirements.txt') as f:
-        return f.read().split()
+        return f.read().split('\n')
 
 
 setup(
@@ -28,13 +28,13 @@ setup(
     long_description=readme(),
     install_requires=get_requirements(),
     extras_require={
-        'xanthos': ["xanthos>=2.1.0"],
-        'tethys': ["tethys>=1.0.0"],
+        'xanthos': ["xanthos>=2.3.1"],
+        'tethys': ["tethys>=1.2.0"],
     },
     dependency_links=[
-        'git+https://github.com/JGCRI/gcam_reader@master#egg=gcam_reader-0.5.0',
-        'git+https://github.com/JGCRI/tethys@master#egg=tethys-1.0.0',
-        'git+https://github.com/JGCRI/xanthos@master#egg=xanthos-2.1.0',
+        'git+https://github.com/JGCRI/gcam_reader@master#egg=gcam_reader-1.0.0',
+        'git+https://github.com/JGCRI/tethys@master#egg=tethys-1.2.0',
+        'git+https://github.com/JGCRI/xanthos@master#egg=xanthos-2.3.1',
     ],
     classifiers=[
         "Programming Language :: Python :: 3.6"
