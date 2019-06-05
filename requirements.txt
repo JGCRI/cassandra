@@ -1,4 +1,2 @@
 configobj>=5.0.6
-gcam_reader>=0.5.0
 pandas>=0.20
-
