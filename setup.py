@@ -15,8 +15,8 @@ def get_requirements():
 
 setup(
     name='cassandra',
-    version='0.5.0',
-    description='A GCAM automation system',
+    version='1.0.0',
+    description='A human-earth system multi-scale model coupling framework',
     url='https://github.com/jgcri/cassandra',
     author='Robert Link; Caleb Braun',
     author_email='robert.link@pnnl.gov',
