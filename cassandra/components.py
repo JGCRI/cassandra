@@ -1325,3 +1325,62 @@ class TgavStubComponent(ComponentBase):
 
         # create a list of years found in each scenario
         return list(range(start_yr, through_yr + 1, 1))
+
+    def build_data_list(self, rds_dict, target_files, year_list, target_scenario):
+        """Generate a list of values for a given variable name and target scenario.
+
+        :param rds_dict:                A Python dictionary of {variable name: value arrays} derived from the emulator
+                                        RDS file.
+        :type rds_dict:                 dict
+
+        :param target_files:            A list of file names from the `infiles` variable from the RDS file that match
+                                        the user defined climate variable name.
+        :type target_files:             list
+
+        :param year_list:               A list of integer years that encompass the data range per realization.
+        :type year_list:                list
+
+        :param target_scenario:         The scenario name (e.g., rcp26)
+        :type target_scenario:          str
+
+        :return:                        A list of values for a given variable name and target scenario.
+
+        """
+
+        # get the number of years
+        len_yr_list = len(year_list)
+
+        d_scenario_tgav = {}
+        for idx, i in enumerate(target_files):
+
+            # split path by delim
+            f_split = os.path.basename(i).split('_')
+
+            # scenario name from file name
+            scn_name = f_split[3]
+
+            # get first files ending index value for slicing out data per year
+            if idx == 0:
+                start_idx = 0
+                end_idx = len_yr_list
+            else:
+                start_idx = end_idx
+                end_idx += len_yr_list
+
+            # add tgav data to scenario dict
+            if scn_name not in d_scenario_tgav:
+                d_scenario_tgav[scn_name] = rds_dict[self.RDS_TGAV_NAME][start_idx:end_idx]
+
+            else:
+                msg = f"{self.__class__} Multiple scenarios in target files for {scn_name}."
+                logging.error(msg)
+                raise KeyError(msg)
+
+        # ensure the target scenario is in the dictionary
+        if target_scenario not in d_scenario_tgav:
+            msg = f"{self.__class__} Scenario '{target_scenario}' is not in the RDS supporting climate file options: '{d_scenario_tgav.keys()}'"
+            logging.error(msg)
+            raise KeyError(msg)
+
+        else:
+            return d_scenario_tgav[target_scenario]
