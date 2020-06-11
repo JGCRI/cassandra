@@ -1300,3 +1300,28 @@ class TgavStubComponent(ComponentBase):
 
         else:
             return target_files
+
+    def generate_year_list(self, target_file):
+        """Generate a list of years that encompass the data range per realization from a parsed a file name.
+
+        :param target_file:             A file name from the `infiles` variable from the RDS file that match
+                                        the user defined climate variable name.
+        :type target_file:              str
+
+        :return:                        A list of integer years that encompass the data range per realization.
+
+        """
+
+        # get a year list for each file from the file name
+        yrs = os.path.basename(target_file).split('_')[-1].split('.')[0].split('-')
+        start_yr = self.validate_year(yrs[0][:4])
+        through_yr = self.validate_year(yrs[1][:4])
+
+        # ensure start year is not greater than through year
+        if start_yr > through_yr:
+            msg = f"{self.__class__} Start year '{start_yr}' > through year '{through_yr}' for emulator file '{target_file}'"
+            logging.error(msg)
+            raise ValueError(msg)
+
+        # create a list of years found in each scenario
+        return list(range(start_yr, through_yr + 1, 1))
