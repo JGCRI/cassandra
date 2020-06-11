@@ -1278,3 +1278,25 @@ class TgavStubComponent(ComponentBase):
 
         # convert the ListVector object to a Python dictionary
         return dict(zip(lvect.names, map(list, list(lvect))))
+
+    def get_files(self, rds_dict):
+        """Get a list of target files that match the climate variable specified in the configuration.
+
+        :param rds_dict:                A Python dictionary of {variable name: value arrays} derived from the emulator
+                                        RDS file.
+        :type rds_dict:                 dict
+
+        :return:                        A list of file names from the `infiles` variable from the RDS file that match
+                                        the user defined climate variable name.
+
+        """
+
+        target_files = [i for i in rds_dict[self.RDS_INFILES_NAME] if os.path.basename(i).split('_')[0] == self.params[self.CLIMATE_VAR_NAME_FIELD]]
+
+        if len(target_files) == 0:
+            msg = f"{self.__class__} There are no datasets matching `climate_var_name` == {self.params[self.CLIMATE_VAR_NAME_FIELD]}"
+            logging.error(msg)
+            raise ValueError(msg)
+
+        else:
+            return target_files
