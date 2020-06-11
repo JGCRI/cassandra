@@ -1238,3 +1238,24 @@ class TgavStubComponent(ComponentBase):
 
         else:
             return valid_yr
+
+    def validate_int(self, value):
+        """Ensure the value can be converted to an integer.
+
+        :param value:                   Target value
+        :type value:                    int, float, str
+
+        :return:                        Validated int of value
+
+        """
+
+        if type(value) == int:
+            return value
+
+        try:
+            return int(value)
+
+        except TypeError:
+            msg = f"{self.__class__} Value '{value}' not able to be converted to an integer as expected."
+            logging.error(msg)
+            raise TypeError(msg)
