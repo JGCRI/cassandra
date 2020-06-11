@@ -11,9 +11,10 @@ _available_components = {
     'GcamComponent': comp.GcamComponent,
     'FldgenComponent': comp.FldgenComponent,
     'HectorStubComponent': comp.HectorStubComponent,
+    'TgavStubComponent': comp.TgavStubComponent,
     'TethysComponent': comp.TethysComponent,
     'XanthosComponent': comp.XanthosComponent,
-    'DummyComponent': comp.DummyComponent,
+    'DummyComponent': comp.DummyComponent
 }
 
 
