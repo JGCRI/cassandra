@@ -1163,9 +1163,30 @@ class DummyComponent(ComponentBase):
 
 
 class TgavStubComponent(ComponentBase):
-    """Feed in external time series of temperature data to provide to fldgen to
-    produce new realizations.
+    """Feed in an RDS file of from ESM runs used to train the fldgen emulator.
 
+    This component is used instead of the HectorStubComponent to provide `tgav` to fldgen.
+
+    The component provides one capability:
+      * Tgav   : global mean temperature
+
+    The `Tgav` capability returns a data frame with data from the target scenario.
+
+    The parameters accepted by this component are:
+
+    :param rds_file:                    Full path with file name and extension to the input RDS emulator file
+                                        containing `tgav` outputs for each scenario
+    :type rds_file:                     str
+
+    :param climate_var_name:            Parent climate model variable name (e.g., tasAdjust) found in the file
+                                        name for the supporting climate data used by the emulator
+    :type climate_var_name:             str
+
+    :param scenario:                    Scenario name (e.g., rcp26)
+    :type scenario:                     str
+
+    :param units_field:                 Unit name from the `tgav` data
+    :type units_field:                  str
 
     """
 
@@ -1197,6 +1218,35 @@ class TgavStubComponent(ComponentBase):
 
         """
         import pandas as pd
+
+        # ensure required params are present
+        self.validate_params()
+
+        # convert the ListVector object from reading a RDS file to a Python dictionary
+        rds_dict = self.rds_to_dict()
+
+        # get a list of target files that match the climate variable specified in the configuration
+        target_files = self.get_files(rds_dict)
+
+        # generate a list of years in a realization
+        year_list = self.generate_year_list(target_files[0])
+
+        # generate a dictionary of {scenario:  data_array} for a tgav for a valid scenario
+        tgav_list = self.build_data_list(rds_dict, target_files, year_list, self.params[self.SCENARIO_FIELD])
+
+        # build a pandas data frame to hold tgav output
+        tgav_df = pd.DataFrame({'year': year_list,
+                                'value': tgav_list})
+
+        # additional expected fields
+        tgav_df['scenario'] = self.params[self.SCENARIO_FIELD]
+        tgav_df['variable'] = self.TGAV_CAPABILITY_NAME
+        tgav_df['units'] = self.params[self.UNITS_FIELD]
+
+        # add to cassandra result queue
+        self.addresults(self.TGAV_CAPABILITY_NAME, tgav_df[self.TGAV_FIELD_ORDER])
+
+        return 0
 
     def validate_params(self):
         """Ensure params are present for this component."""
