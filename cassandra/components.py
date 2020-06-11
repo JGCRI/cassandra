@@ -1197,3 +1197,17 @@ class TgavStubComponent(ComponentBase):
 
         """
         import pandas as pd
+
+    def validate_params(self):
+        """Ensure params are present for this component."""
+
+        # list of expected params
+        param_list = [self.RDS_FILE_FIELD, self.CLIMATE_VAR_NAME_FIELD, self.SCENARIO_FIELD, self.UNITS_FIELD]
+
+        for i in param_list:
+
+            if i not in self.params:
+                msg = f"{self.__class__} Required parameter '{i}' not in config file."
+                logging.error(msg)
+                raise KeyError(msg)
+    
