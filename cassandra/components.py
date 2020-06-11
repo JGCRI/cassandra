@@ -1052,8 +1052,7 @@ class HectorStubComponent(ComponentBase):
         from pickle import load
 
         data = pkg_resources.resource_filename('cassandra', 'data')
-        infile = open(join(data, f'hector-outputstream-{scen}.dat'),
-                      'rb')
+        infile = open(join(data, f'hector-outputstream-{scen}.dat'),'rb')
         df = load(infile)
         infile.close()
 
@@ -1161,3 +1160,40 @@ class DummyComponent(ComponentBase):
     def report_test_results(self):
         """Report the component's results to the unit testing code."""
         return self.results[self.name]
+
+
+class TgavStubComponent(ComponentBase):
+    """Feed in external time series of temperature data to provide to fldgen to
+    produce new realizations.
+
+
+    """
+
+    # RDS file variable names
+    RDS_TGAV_NAME = 'tgav'
+    RDS_INFILES_NAME = 'infiles'
+
+    # capability name
+    TGAV_CAPABILITY_NAME = 'Tgav'
+
+    # output field order for the tgav data frame
+    TGAV_FIELD_ORDER = ['year', 'scenario', 'variable', 'value', 'units']
+
+    # component expected configuration fields
+    RDS_FILE_FIELD = 'rds_file'
+    CLIMATE_VAR_NAME_FIELD = 'climate_var_name'
+    SCENARIO_FIELD = 'scenario'
+    UNITS_FIELD = 'units'
+
+    def __init__(self, cap_tbl):
+        super(TgavStubComponent, self).__init__(cap_tbl)
+        self.addcapability(self.TGAV_CAPABILITY_NAME)
+
+    def run_component(self):
+        """Run the TgavStubComponent component
+
+        Load the requested scenarios and make each variable available to the
+        rest of the system.
+
+        """
+        import pandas as pd
