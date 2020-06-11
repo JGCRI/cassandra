@@ -1259,3 +1259,22 @@ class TgavStubComponent(ComponentBase):
             msg = f"{self.__class__} Value '{value}' not able to be converted to an integer as expected."
             logging.error(msg)
             raise TypeError(msg)
+
+    def rds_to_dict(self):
+        """Read in and convert an RDS file to a Python dictionary.
+
+        :return:                        A Python dictionary of {variable name: value arrays}
+
+        """
+        import rpy2.robjects as robjects
+        from rpy2.robjects import pandas2ri
+        pandas2ri.activate()
+
+        # get a wrapper around the readRDS R function
+        read_rds = robjects.r['readRDS']
+
+        # create ListVector object
+        lvect = read_rds(self.params[self.RDS_FILE_FIELD])
+
+        # convert the ListVector object to a Python dictionary
+        return dict(zip(lvect.names, map(list, list(lvect))))
