@@ -1210,4 +1210,31 @@ class TgavStubComponent(ComponentBase):
                 msg = f"{self.__class__} Required parameter '{i}' not in config file."
                 logging.error(msg)
                 raise KeyError(msg)
-    
+
+    def validate_year(self, yr, min_yr=0, max_yr=10000):
+        """Ensure years are within a reasonable range and are integers.
+
+        :param yr:                      Target year
+        :type yr:                       int
+
+        :param min_yr:                  Minimum year allowable
+        :type min_yr:                   int
+
+        :param max_yr:                  Maximum year allowable
+        :type max_yr:                   int
+
+        :return:                        [0] validated start year as a four digit integer
+                                        [1] validated end year as a four digit integer
+
+        """
+
+        # validate that the year can be converted to an integer
+        valid_yr = self.validate_int(yr)
+
+        if (valid_yr < min_yr) or (valid_yr > max_yr):
+            msg = f"{self.__class__} Year '{valid_yr}' is outside of the reasonable bounds [{min_yr} - {max_yr}]."
+            logging.error(msg)
+            raise ValueError(msg)
+
+        else:
+            return valid_yr
