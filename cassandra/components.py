@@ -1167,13 +1167,19 @@ class TgavStubComponent(ComponentBase):
 
     This component is used instead of the HectorStubComponent to provide `tgav` to fldgen.
 
-    The component provides one capability:
-      * Tgav   : global mean temperature
+    The component provides two capabilities:
+    :param Tgav:                        A data frame containing global mean temperature with fields
+                                        ['year', 'scenario', 'variable', 'value', 'units']; where value is 'Tgav'
+    :type Tgav:                         Pandas DataFrame
 
-    The `Tgav` capability returns a data frame with data from the target scenario.
+    :param tgav_metadata:               A dictionary of metadata for the `Tgav` capability including:
+                                        [rds_file, scenario, climate_var_name, source_climate_data, units,
+                                        count, mean, median, min, max, std, na_count, null_count, all_finite]
+                                        designations
+    :type tgav_metadata:                dict
+
 
     The parameters accepted by this component are:
-
     :param rds_file:                    Full path with file name and extension to the input RDS emulator file
                                         containing `tgav` outputs for each scenario
     :type rds_file:                     str
@@ -1187,6 +1193,12 @@ class TgavStubComponent(ComponentBase):
 
     :param units_field:                 Unit name from the `tgav` data
     :type units_field:                  str
+
+    :param start_year:                  Start year of the climate data
+    :type start_year:                   int
+
+    :param through_year:                Year climate data goes through
+    :type through_year:                 int
 
     """
 
@@ -1205,18 +1217,18 @@ class TgavStubComponent(ComponentBase):
     CLIMATE_VAR_NAME_FIELD = 'climate_var_name'
     SCENARIO_FIELD = 'scenario'
     UNITS_FIELD = 'units'
+    START_YEAR_FIELD = 'start_year'
+    THROUGH_YEAR_FIELD = 'through_year'
 
     def __init__(self, cap_tbl):
         super(TgavStubComponent, self).__init__(cap_tbl)
+
+        # add capabilities to Cassandra
         self.addcapability(self.TGAV_CAPABILITY_NAME)
+        self.addcapability('tgav_metadata')
 
     def run_component(self):
-        """Run the TgavStubComponent component
-
-        Load the requested scenarios and make each variable available to the
-        rest of the system.
-
-        """
+        """Run the TgavStubComponent component"""
         import pandas as pd
 
         # ensure required params are present
@@ -1225,18 +1237,21 @@ class TgavStubComponent(ComponentBase):
         # convert the ListVector object from reading a RDS file to a Python dictionary
         rds_dict = self.rds_to_dict()
 
-        # get a list of target files that match the climate variable specified in the configuration
-        target_files = self.get_files(rds_dict)
+        # get a dictionary of the target file name and the file index for the specified configuration
+        target_file_dict = self.build_file_dict(rds_dict)
 
         # generate a list of years in a realization
-        year_list = self.generate_year_list(target_files[0])
+        year_list = self.build_year_list()
 
-        # generate a dictionary of {scenario:  data_array} for a tgav for a valid scenario
-        tgav_list = self.build_data_list(rds_dict, target_files, year_list, self.params[self.SCENARIO_FIELD])
+        # generate a list of values for a given variable name and target scenario
+        tgav_list = self.build_data_list(rds_dict, target_file_dict, year_list)
 
         # build a pandas data frame to hold tgav output
         tgav_df = pd.DataFrame({'year': year_list,
                                 'value': tgav_list})
+
+        # report data summary
+        meta_dict = self.tgav_metadata(tgav_df, target_file_dict)
 
         # additional expected fields
         tgav_df['scenario'] = self.params[self.SCENARIO_FIELD]
@@ -1245,21 +1260,46 @@ class TgavStubComponent(ComponentBase):
 
         # add to cassandra result queue
         self.addresults(self.TGAV_CAPABILITY_NAME, tgav_df[self.TGAV_FIELD_ORDER])
+        self.addresults('tgav_metadata', meta_dict)
 
         return 0
+
+    @staticmethod
+    def log_raise_exception(exception, message, log_msg=True, raise_msg=True):
+        """Log an error and raise an exception.
+
+        :param exception:               Exception class
+        :type exception:                class object
+
+        :param message:                 Message to log and raise
+        :type message:                  str
+
+        :param log_msg:                 Optional.  Log as error if True; default True
+        :type log_msg:                  bool
+
+        :param raise_msg:               Optional. Raise exception if True; default True
+        :type raise_msg:                bool
+
+        """
+
+        if log_msg:
+            logging.error(message)
+
+        if raise_msg:
+            raise exception(message)
 
     def validate_params(self):
         """Ensure params are present for this component."""
 
         # list of expected params
-        param_list = [self.RDS_FILE_FIELD, self.CLIMATE_VAR_NAME_FIELD, self.SCENARIO_FIELD, self.UNITS_FIELD]
+        param_list = [self.RDS_FILE_FIELD, self.CLIMATE_VAR_NAME_FIELD, self.SCENARIO_FIELD, self.UNITS_FIELD,
+                      self.START_YEAR_FIELD, self.THROUGH_YEAR_FIELD]
 
         for i in param_list:
 
             if i not in self.params:
                 msg = f"{self.__class__} Required parameter '{i}' not in config file."
-                logging.error(msg)
-                raise KeyError(msg)
+                self.log_raise_exception(KeyError, msg)
 
     def validate_year(self, yr, min_yr=0, max_yr=10000):
         """Ensure years are within a reasonable range and are integers.
@@ -1283,8 +1323,7 @@ class TgavStubComponent(ComponentBase):
 
         if (valid_yr < min_yr) or (valid_yr > max_yr):
             msg = f"{self.__class__} Year '{valid_yr}' is outside of the reasonable bounds [{min_yr} - {max_yr}]."
-            logging.error(msg)
-            raise ValueError(msg)
+            self.log_raise_exception(ValueError, msg)
 
         else:
             return valid_yr
@@ -1299,7 +1338,7 @@ class TgavStubComponent(ComponentBase):
 
         """
 
-        if type(value) == int:
+        if type(value) is int:
             return value
 
         try:
@@ -1307,8 +1346,7 @@ class TgavStubComponent(ComponentBase):
 
         except TypeError:
             msg = f"{self.__class__} Value '{value}' not able to be converted to an integer as expected."
-            logging.error(msg)
-            raise TypeError(msg)
+            self.log_raise_exception(TypeError, msg)
 
     def rds_to_dict(self):
         """Read in and convert an RDS file to a Python dictionary.
@@ -1316,6 +1354,7 @@ class TgavStubComponent(ComponentBase):
         :return:                        A Python dictionary of {variable name: value arrays}
 
         """
+
         import rpy2.robjects as robjects
         from rpy2.robjects import pandas2ri
         pandas2ri.activate()
@@ -1329,108 +1368,121 @@ class TgavStubComponent(ComponentBase):
         # convert the ListVector object to a Python dictionary
         return dict(zip(lvect.names, map(list, list(lvect))))
 
-    def get_files(self, rds_dict):
+    def build_file_dict(self, rds_dict):
         """Get a list of target files that match the climate variable specified in the configuration.
 
         :param rds_dict:                A Python dictionary of {variable name: value arrays} derived from the emulator
                                         RDS file.
         :type rds_dict:                 dict
 
-        :return:                        A list of file names from the `infiles` variable from the RDS file that match
-                                        the user defined climate variable name.
+        :return:                        A dictonary of file names and their corresponding index from the
+                                        `infiles` variable from the RDS file that match the user defined
+                                        configuration parameters.
+                                        Format: {'files': ['<file path>'], 'file_index': [<file index>]}
 
         """
 
-        target_files = [i for i in rds_dict[self.RDS_INFILES_NAME] if os.path.basename(i).split('_')[0] == self.params[self.CLIMATE_VAR_NAME_FIELD]]
+        target_file_dict = {}
+        for index, i in enumerate(rds_dict[self.RDS_INFILES_NAME]):
 
-        if len(target_files) == 0:
-            msg = f"{self.__class__} There are no datasets matching `climate_var_name` == {self.params[self.CLIMATE_VAR_NAME_FIELD]}"
-            logging.error(msg)
-            raise ValueError(msg)
+            # get file name from path
+            base = os.path.basename(i)
+
+            # get only files matching search criteria from params
+            if (self.params[self.SCENARIO_FIELD] in base) \
+                    and (self.params[self.CLIMATE_VAR_NAME_FIELD] in base) \
+                    and (str(self.params[self.START_YEAR_FIELD]) in base) \
+                    and (str(self.params[self.THROUGH_YEAR_FIELD]) in base):
+
+                # add file name to dictionary
+                target_file_dict.setdefault('files', []).append(i)
+
+                # add file index to dictionary
+                target_file_dict.setdefault('file_index', []).append(index)
+
+        # the number of target files found matching the search criteria
+        n_files = len(target_file_dict['files'])
+
+        if n_files == 0:
+            msg = f"{self.__class__} There are no data sets matching the input parameters in file list: {rds_dict[self.RDS_INFILES_NAME]}. One matching file required."
+            self.log_raise_exception(ValueError, msg)
+
+        elif n_files > 1:
+            msg = f"{self.__class__} There are {n_files} data sets matching the input parameters in file list: {rds_dict[self.RDS_INFILES_NAME]}. One matching file required."
+            self.log_raise_exception(ValueError, msg)
 
         else:
-            return target_files
+            return target_file_dict
 
-    def generate_year_list(self, target_file):
-        """Generate a list of years that encompass the data range per realization from a parsed a file name.
+    def build_year_list(self):
+        """Construct a list of years that the data provides."""
 
-        :param target_file:             A file name from the `infiles` variable from the RDS file that match
-                                        the user defined climate variable name.
-        :type target_file:              str
+        # validate years
+        start_yr = self.validate_year(self.params[self.START_YEAR_FIELD])
+        through_yr = self.validate_year(self.params[self.THROUGH_YEAR_FIELD])
 
-        :return:                        A list of integer years that encompass the data range per realization.
-
-        """
-
-        # get a year list for each file from the file name
-        yrs = os.path.basename(target_file).split('_')[-1].split('.')[0].split('-')
-        start_yr = self.validate_year(yrs[0][:4])
-        through_yr = self.validate_year(yrs[1][:4])
-
-        # ensure start year is not greater than through year
-        if start_yr > through_yr:
-            msg = f"{self.__class__} Start year '{start_yr}' > through year '{through_yr}' for emulator file '{target_file}'"
-            logging.error(msg)
-            raise ValueError(msg)
-
-        # create a list of years found in each scenario
         return list(range(start_yr, through_yr + 1, 1))
 
-    def build_data_list(self, rds_dict, target_files, year_list, target_scenario):
+    def build_data_list(self, rds_dict, target_file_dict, year_list):
         """Generate a list of values for a given variable name and target scenario.
 
         :param rds_dict:                A Python dictionary of {variable name: value arrays} derived from the emulator
                                         RDS file.
         :type rds_dict:                 dict
 
-        :param target_files:            A list of file names from the `infiles` variable from the RDS file that match
-                                        the user defined climate variable name.
-        :type target_files:             list
+        :param target_file_dict:        A dictonary of file names and their corresponding index from the
+                                        `infiles` variable from the RDS file that match the user defined
+                                        configuration parameters.
+                                        Format: {'files': ['<file path>'], 'file_index': [<file index>]}
+        :type target_file_dict:         dict
 
         :param year_list:               A list of integer years that encompass the data range per realization.
         :type year_list:                list
 
-        :param target_scenario:         The scenario name (e.g., rcp26)
-        :type target_scenario:          str
-
-        :return:                        A list of values for a given variable name and target scenario.
+        :return:                        A list of values for a target parameterization
 
         """
 
-        # get the number of years
-        len_yr_list = len(year_list)
+        # number of years for a realization
+        n_years = len(year_list)
 
-        d_scenario_tgav = {}
-        for idx, i in enumerate(target_files):
+        # index of file corresponding to the position of the window containing the data for the target params
+        file_index = target_file_dict['file_index'][0]
 
-            # split path by delim
-            f_split = os.path.basename(i).split('_')
+        # start and end index for the data window to extract
+        start_index = n_years * file_index
+        end_index = n_years * (file_index + 1)
 
-            # scenario name from file name
-            scn_name = f_split[3]
+        return rds_dict[self.RDS_TGAV_NAME][start_index:end_index]
 
-            # get first files ending index value for slicing out data per year
-            if idx == 0:
-                start_idx = 0
-                end_idx = len_yr_list
-            else:
-                start_idx = end_idx
-                end_idx += len_yr_list
+    def tgav_metadata(self, df, target_file_dict):
+        """Create a dictionary holding a data summary about the 'Tgav' dataset and parameter assumptions.
 
-            # add tgav data to scenario dict
-            if scn_name not in d_scenario_tgav:
-                d_scenario_tgav[scn_name] = rds_dict[self.RDS_TGAV_NAME][start_idx:end_idx]
+        :param df:
 
-            else:
-                msg = f"{self.__class__} Multiple scenarios in target files for {scn_name}."
-                logging.error(msg)
-                raise KeyError(msg)
+        :return:
 
-        # ensure the target scenario is in the dictionary
-        if target_scenario not in d_scenario_tgav:
-            msg = f"{self.__class__} Scenario '{target_scenario}' is not in the RDS supporting climate file options: '{d_scenario_tgav.keys()}'"
-            logging.error(msg)
-            raise KeyError(msg)
+        """
 
-        else:
-            return d_scenario_tgav[target_scenario]
+        from numpy import isfinite
+
+        meta_dict = {'rds_file': self.params[self.RDS_FILE_FIELD],
+                     'scenario': self.params[self.SCENARIO_FIELD],
+                     'climate_var_name': self.params[self.CLIMATE_VAR_NAME_FIELD],
+                     'source_climate_data': target_file_dict['files'][0],
+                     'units': self.params[self.UNITS_FIELD],
+                     'count': df['value'].count(),
+                     'mean': df['value'].mean(),
+                     'median': df['value'].median(),
+                     'min': df['value'].min(),
+                     'max': df['value'].max(),
+                     'std': df['value'].std(),
+                     'na_count': df['value'].isna().sum(),
+                     'null_count': df['value'].isnull().sum(),
+                     'all_finite': isfinite(df['value']).all()}
+
+        for k in meta_dict.keys():
+            logging.info(f"{self.__class__} 'Tgav' data summary: {k}=={meta_dict[k]}")
+            print(f"{self.__class__} '{self.TGAV_CAPABILITY_NAME}' data summary: {k}=={meta_dict[k]}")
+
+        return meta_dict
