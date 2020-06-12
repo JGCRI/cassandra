@@ -1229,7 +1229,6 @@ class TgavStubComponent(ComponentBase):
 
     def run_component(self):
         """Run the TgavStubComponent component"""
-        import pandas as pd
 
         # ensure required params are present
         self.validate_params()
@@ -1247,16 +1246,10 @@ class TgavStubComponent(ComponentBase):
         tgav_list = self.build_data_list(rds_dict, target_file_dict, year_list)
 
         # build a pandas data frame to hold tgav output
-        tgav_df = pd.DataFrame({'year': year_list,
-                                'value': tgav_list})
+        tgav_df = self.build_dataframe(year_list, tgav_list)
 
         # report data summary
         meta_dict = self.tgav_metadata(tgav_df, target_file_dict)
-
-        # additional expected fields
-        tgav_df['scenario'] = self.params[self.SCENARIO_FIELD]
-        tgav_df['variable'] = self.TGAV_CAPABILITY_NAME
-        tgav_df['units'] = self.params[self.UNITS_FIELD]
 
         # add to cassandra result queue
         self.addresults(self.TGAV_CAPABILITY_NAME, tgav_df[self.TGAV_FIELD_ORDER])
@@ -1344,9 +1337,26 @@ class TgavStubComponent(ComponentBase):
         try:
             return int(value)
 
-        except TypeError:
+        except ValueError:
             msg = f"{self.__class__} Value '{value}' not able to be converted to an integer as expected."
-            self.log_raise_exception(TypeError, msg)
+            self.log_raise_exception(ValueError, msg)
+
+    def validate_file_exist(self, file_path):
+        """Ensure file exists.
+
+        :param file_path:               Full path with file name an extension to in input file.
+        :type file_path:                str
+
+        :return:                        Validated file path
+
+        """
+
+        if os.path.isfile(file_path):
+            return file_path
+
+        else:
+            msg = f"Input file '{file_path}' does not exist."
+            self.log_raise_exception(FileNotFoundError, msg)
 
     def rds_to_dict(self):
         """Read in and convert an RDS file to a Python dictionary.
@@ -1363,7 +1373,8 @@ class TgavStubComponent(ComponentBase):
         read_rds = robjects.r['readRDS']
 
         # create ListVector object
-        lvect = read_rds(self.params[self.RDS_FILE_FIELD])
+        rds_file = self.validate_file_exist(self.params[self.RDS_FILE_FIELD])
+        lvect = read_rds(rds_file)
 
         # convert the ListVector object to a Python dictionary
         return dict(zip(lvect.names, map(list, list(lvect))))
@@ -1382,8 +1393,21 @@ class TgavStubComponent(ComponentBase):
 
         """
 
+        try:
+            infile_list = rds_dict[self.RDS_INFILES_NAME]
+        except KeyError:
+            msg = f"Field '{self.RDS_INFILES_NAME}' is not in the RDS dictionary."
+            self.log_raise_exception(KeyError, msg)
+
         target_file_dict = {}
-        for index, i in enumerate(rds_dict[self.RDS_INFILES_NAME]):
+
+        # add file name to dictionary
+        files = target_file_dict.setdefault('files', [])
+
+        # add file index to dictionary
+        file_index = target_file_dict.setdefault('file_index', [])
+
+        for index, i in enumerate(infile_list):
 
             # get file name from path
             base = os.path.basename(i)
@@ -1395,20 +1419,20 @@ class TgavStubComponent(ComponentBase):
                     and (str(self.params[self.THROUGH_YEAR_FIELD]) in base):
 
                 # add file name to dictionary
-                target_file_dict.setdefault('files', []).append(i)
+                files.append(i)
 
                 # add file index to dictionary
-                target_file_dict.setdefault('file_index', []).append(index)
+                file_index.append(index)
 
         # the number of target files found matching the search criteria
         n_files = len(target_file_dict['files'])
 
         if n_files == 0:
-            msg = f"{self.__class__} There are no data sets matching the input parameters in file list: {rds_dict[self.RDS_INFILES_NAME]}. One matching file required."
+            msg = f"{self.__class__} There are no data sets matching the input parameters in file list: {infile_list}. One matching file required."
             self.log_raise_exception(ValueError, msg)
 
         elif n_files > 1:
-            msg = f"{self.__class__} There are {n_files} data sets matching the input parameters in file list: {rds_dict[self.RDS_INFILES_NAME]}. One matching file required."
+            msg = f"{self.__class__} There are {n_files} data sets matching the input parameters in file list: {infile_list}. One matching file required."
             self.log_raise_exception(ValueError, msg)
 
         else:
@@ -1455,12 +1479,49 @@ class TgavStubComponent(ComponentBase):
 
         return rds_dict[self.RDS_TGAV_NAME][start_index:end_index]
 
+    def build_dataframe(self, year_list, tgav_list):
+        """Build output data frame for Tgav.
+
+        :param year_list:               A list of integer years that encompass the data range per realization.
+        :type year_list:                list
+
+        :param tgav_list:               A list of values for a given variable name and target scenario
+        :type tgav_list:                list
+
+        :param target_file_dict:        A dictonary of file names and their corresponding index from the
+                                        `infiles` variable from the RDS file that match the user defined
+                                        configuration parameters.
+                                        Format: {'files': ['<file path>'], 'file_index': [<file index>]}
+        :type target_file_dict:         dict
+
+        :return:                        A data frame holding Tgav outputs and required ancillary data
+
+        """
+        import pandas as pd
+
+        # build a pandas data frame to hold tgav output
+        df = pd.DataFrame({'year': year_list, 'value': tgav_list})
+
+        # additional expected fields
+        df['scenario'] = self.params[self.SCENARIO_FIELD]
+        df['variable'] = self.TGAV_CAPABILITY_NAME
+        df['units'] = self.params[self.UNITS_FIELD]
+
+        return df[self.TGAV_FIELD_ORDER]
+
     def tgav_metadata(self, df, target_file_dict):
         """Create a dictionary holding a data summary about the 'Tgav' dataset and parameter assumptions.
 
-        :param df:
+        :param df:                      A data frame holding Tgav outputs and required ancillary data
+        :type df:                       data frame
 
-        :return:
+        :param target_file_dict:        A dictonary of file names and their corresponding index from the
+                                        `infiles` variable from the RDS file that match the user defined
+                                        configuration parameters.
+                                        Format: {'files': ['<file path>'], 'file_index': [<file index>]}
+        :type target_file_dict:         dict
+
+        :return:                        A dictionary of metadata for the Tgav data
 
         """
 
