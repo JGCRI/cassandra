@@ -25,6 +25,7 @@ before_install:
 cache: pip
 
 install:
+  - pip install -Iv rpy2==3.3.3
   - pip install git+https://github.com/JGCRI/gcam_reader
   - pip install git+https://github.com/JGCRI/tethys
   - pip install git+https://github.com/JGCRI/xanthos
