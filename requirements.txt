@@ -1,2 +1,4 @@
 configobj>=5.0.6
 pandas>=0.20
+numpy>=1.16
+rpy2>=2.9

@@ -6,6 +6,7 @@ matrix:
       dist: xenial
 cache: pip
 install:
+  - echo 'source("https://bioconductor.org/biocLite.R"); biocLite("S4Vectors"); biocLite("GenomicRanges")' > install.R
   - pip install git+https://github.com/JGCRI/gcam_reader
   - pip install git+https://github.com/JGCRI/tethys
   - pip install git+https://github.com/JGCRI/xanthos
